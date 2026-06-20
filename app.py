@@ -604,6 +604,9 @@ with tab_lib:
         if 'selected_song_id' not in st.session_state:
             st.session_state.selected_song_id = None
 
+        # Placeholder for the detail panel at the TOP
+        detail_placeholder = st.container()
+
         cols = st.columns(4)
         for i, (sid, name) in enumerate(filtered.items()):
             img_b64 = db.song_images.get(sid, "")
@@ -626,7 +629,7 @@ with tab_lib:
                     else:
                         st.session_state.selected_song_id = sid
 
-        # ── Song Detail Panel ─────────────────────────────────────────────
+        # ── Song Detail Panel (Rendered at the top) ───────────────────────
         sel_sid = st.session_state.selected_song_id
         if sel_sid is not None and sel_sid in db.song_names:
             sel_name   = db.song_names[sel_sid]
@@ -640,14 +643,15 @@ with tab_lib:
                 'display:flex;align-items:center;justify-content:center;font-size:2rem;">🎵</div>'
             )
 
-            st.markdown(f"""
-            <div class="song-detail-panel">
-                <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-                    <div style="font-family:'Space Mono',monospace;font-size:0.65rem;
-                                color:#3fb950;letter-spacing:3px;text-transform:uppercase;">Selected Song</div>
-                    <div style="flex:1;height:1px;background:#21262d;"></div>
-                    <div style="font-size:0.75rem;color:#6e7681;cursor:pointer;">click again to close</div>
-                </div>
+            with detail_placeholder:
+                st.markdown(f"""
+                <div class="song-detail-panel">
+                    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+                        <div style="font-family:'Space Mono',monospace;font-size:0.65rem;
+                                    color:#3fb950;letter-spacing:3px;text-transform:uppercase;">Selected Song</div>
+                        <div style="flex:1;height:1px;background:#21262d;"></div>
+                        <div style="font-size:0.75rem;color:#6e7681;cursor:pointer;">click song again to close</div>
+                    </div>
                 <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;">
                     <div style="flex:1;min-width:200px;">
                         {img_html}
