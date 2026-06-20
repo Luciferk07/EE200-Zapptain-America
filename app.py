@@ -749,7 +749,10 @@ with tab_id:
             </div>
             """, unsafe_allow_html=True)
 
-            if not results:
+            # ── Strict Match Threshold ──
+            # A real match usually has hundreds of aligned hashes.
+            # We require at least 15 hashes aligning exactly to prevent random voice false positives.
+            if not results or results[0]['score'] < 15:
                 st.markdown("""
                 <div class="no-match-banner">
                     <div style="font-size:2rem;margin-bottom:8px;">❓</div>
@@ -948,7 +951,7 @@ with tab_batch:
                     fr, ti  = recognizer.extract_peaks(spec, percentile=90)
                     hs      = recognizer.generate_hashes(fr, ti)
                     ms      = db.match_hashes(hs)
-                    prediction = ms[0]['song_name'] if ms else "NO MATCH"
+                    prediction = ms[0]['song_name'] if (ms and ms[0]['score'] >= 15) else "NO MATCH"
                 except Exception:
                     prediction = "ERROR"
                 finally:
