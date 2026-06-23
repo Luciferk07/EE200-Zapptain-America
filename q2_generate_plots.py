@@ -93,16 +93,16 @@ plt.show()
 print("Saved: q2_correlation_plot.png")
 
 # ── Figure 2: Spectrogram ────────────────────────────────────────────────
-# nperseg=250 => Delta_f = 250/250 = 1.0 Hz  (clearly resolves 1.25 Hz harmonics)
-# noverlap=200 => time step = 50/250 = 0.2 s
+# nperseg=200 => Delta_f = 250/200 = 1.25 Hz  (bins perfectly align with harmonics)
+# noverlap=150 => time step = 50/250 = 0.2 s
 f_spect, t_spect, Sxx = scipy_spectrogram(
     ecg_signal, fs=fs,
-    nperseg=250, noverlap=200,
+    nperseg=200, noverlap=150,
     window='hann'
 )
 
-print(f"\nSpectrogram freq resolution: {fs/250:.2f} Hz")
-print(f"Spectrogram time step:       {(250-200)/fs:.3f} s")
+print(f"\nSpectrogram freq resolution: {fs/200:.2f} Hz")
+print(f"Spectrogram time step:       {(200-150)/fs:.3f} s")
 print(f"Sxx shape:                   {Sxx.shape}  (freq_bins x time_frames)")
 
 fig2, ax3 = plt.subplots(figsize=(14, 5))
@@ -131,7 +131,7 @@ ax3.set_ylabel('Frequency [Hz]')
 ax3.set_title(
     'Spectrogram of Patient ECG\n'
     '(cyan dashed = expected harmonics at 1.25 Hz x k;  '
-    'yellow = detected onset;  nperseg=250, Delta_f=1 Hz)'
+    'yellow = detected onset;  nperseg=200, Delta_f=1.25 Hz)'
 )
 ax3.legend(loc='upper right')
 plt.colorbar(pcm, ax=ax3, label='Power [dB]')
