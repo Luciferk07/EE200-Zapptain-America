@@ -1,1199 +1,846 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import os
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import tempfile
 import time
 import re
+import io
+import base64
 from audio_recognizer import AudioRecognizer, SongDatabase
 
-# ─── PAGE CONFIG ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────── PAGE CONFIG
 st.set_page_config(
-    page_title="Zapptain America · Audio Fingerprinting",
-    page_icon="🎵",
+    page_title="SoundScope · Audio Fingerprinting",
+    page_icon="◈",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-# ─── BEAST MODE CSS ──────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────── CSS
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600&family=Unbounded:wght@700;800&display=swap');
 
-/* ─────────────────────────────────────────────────────────── BASE */
-*, *::before, *::after { box-sizing: border-box; }
+/* BASE */
 html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
-    background-color: #05080d;
-    color: #c9d1d9;
+    background: #0c0c0e;
+    color: #e4e4e7;
     cursor: none !important;
 }
-.block-container { padding: 1.2rem 2rem 3rem !important; max-width: 1400px !important; }
-::-webkit-scrollbar { width: 5px; }
-::-webkit-scrollbar-track { background: #0b1117; }
-::-webkit-scrollbar-thumb { background: linear-gradient(180deg,#00ff88,#00aaff); border-radius: 3px; }
+* { box-sizing: border-box; }
+.block-container { padding: 1.5rem 2.2rem 4rem !important; max-width: 1440px !important; }
 
-/* ─────────────────────────────────────────────────────── CUSTOM CURSOR */
-#cursor-ring {
-    position: fixed; top:0; left:0; pointer-events:none; z-index:99999;
-    width:28px; height:28px; border-radius:50%;
-    border: 1.5px solid rgba(0,255,136,0.7);
-    transform: translate(-50%,-50%);
-    transition: transform 0.12s ease, width 0.2s ease, height 0.2s ease, border-color 0.2s ease;
-    mix-blend-mode: screen;
-}
-#cursor-dot {
-    position:fixed; top:0; left:0; pointer-events:none; z-index:100000;
-    width:5px; height:5px; border-radius:50%;
-    background: #00ff88;
-    transform: translate(-50%,-50%);
-    transition: transform 0.04s linear;
-}
+/* SCROLLBAR */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 4px; }
 
-/* ─────────────────────────────────────────────────────── ANIMATED BG */
-.stApp {
-    background:
-        radial-gradient(ellipse at 15% 50%, rgba(0,255,136,0.04) 0%, transparent 50%),
-        radial-gradient(ellipse at 85% 20%, rgba(0,170,255,0.04) 0%, transparent 50%),
-        #05080d;
-}
-
-/* Noise grain overlay */
-.stApp::before {
-    content: '';
-    position: fixed; inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-    pointer-events: none; z-index: 0; opacity: 0.4;
-}
-
-/* ─────────────────────────────────────────────────────── SIDEBAR */
+/* SIDEBAR */
 [data-testid="stSidebar"] {
-    background: rgba(5,8,13,0.95) !important;
-    border-right: 1px solid rgba(0,255,136,0.1) !important;
-    backdrop-filter: blur(20px);
+    background: #09090b !important;
+    border-right: 1px solid #1c1c1f !important;
 }
-[data-testid="stSidebar"] .block-container { padding: 1.2rem !important; }
-.sidebar-section-title {
-    font-family:'Space Mono',monospace;
-    font-size:0.58rem;
-    color: rgba(0,255,136,0.6);
-    letter-spacing:3px;
-    text-transform:uppercase;
-    margin-bottom:12px;
-    margin-top:8px;
-}
-.sys-card {
-    background: rgba(0,255,136,0.03);
-    border: 1px solid rgba(0,255,136,0.08);
-    border-radius: 10px;
-    padding: 12px 14px;
-    margin-bottom: 8px;
-    transition: border-color 0.3s, background 0.3s;
-}
-.sys-card:hover {
-    border-color: rgba(0,255,136,0.25);
-    background: rgba(0,255,136,0.06);
-}
-.sys-card-val {
-    font-family:'Space Mono',monospace;
-    font-size:1.5rem;
-    font-weight:700;
-    background: linear-gradient(135deg,#00ff88,#00aaff);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    line-height:1.2;
-}
-.sys-card-label { font-size:0.68rem; color:#6e7681; margin-top:2px; letter-spacing:0.5px; }
+[data-testid="stSidebar"] .block-container { padding: 1.5rem 1.2rem !important; }
 
-.algo-param {
-    display:flex; justify-content:space-between; align-items:center;
-    padding:6px 0;
-    border-bottom:1px solid rgba(255,255,255,0.04);
-    font-size:0.78rem;
-}
-.algo-key { font-family:'Space Mono',monospace; color:#6e7681; font-size:0.72rem; }
-.algo-val { font-family:'Space Mono',monospace; color:#00ff88; font-weight:700; font-size:0.72rem; }
-
-/* ─────────────────────────────────────────────────────── HERO */
-.hero-wrap {
-    padding: 32px 0 28px;
-    border-bottom: 1px solid rgba(0,255,136,0.08);
-    margin-bottom: 28px;
-    position: relative;
-}
-.hero-eyebrow {
-    display:inline-flex; align-items:center; gap:8px;
-    font-family:'Space Mono',monospace;
-    font-size:0.62rem;
-    color: #00ff88;
-    letter-spacing:3px;
-    text-transform:uppercase;
-    margin-bottom:14px;
-}
-.hero-eyebrow-dot {
-    width:6px; height:6px; border-radius:50%; background:#00ff88;
-    animation: blink 1.5s infinite;
-}
-@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
-
-.hero-title {
-    font-family: 'Syne', sans-serif;
-    font-size: 3.8rem;
+.sb-logo {
+    font-family: 'Unbounded', sans-serif;
+    font-size: 1rem;
     font-weight: 800;
-    color: #f0f6fc;
-    line-height: 1.05;
-    margin: 0 0 4px;
-    letter-spacing: -2px;
+    letter-spacing: -0.5px;
+    color: #fafafa;
+    margin-bottom: 6px;
 }
-.hero-title .accent {
-    background: linear-gradient(135deg, #00ff88 0%, #00aaff 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-.hero-sub {
-    color: #4d5765;
-    font-size: 0.95rem;
-    font-weight: 400;
-    margin-top: 10px;
-    max-width: 620px;
-    line-height: 1.6;
-}
-.hero-pills {
-    display:flex; gap:8px; flex-wrap:wrap; margin-top:18px;
-}
-.hero-pill {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 20px;
-    padding: 4px 14px;
-    font-size: 0.75rem;
-    color: #6e7681;
-    font-family: 'Space Mono', monospace;
-}
-.hero-pill b { color: #e6edf3; }
+.sb-logo span { color: #818cf8; }
+.sb-tagline { font-size: 0.65rem; color: #52525b; letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 24px; }
 
-/* ─────────────────────────────────────────────────────── TABS */
+.sb-divider { height: 1px; background: #18181b; margin: 18px 0; }
+
+.sb-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.55rem; color: #52525b;
+    letter-spacing: 2px; text-transform: uppercase;
+    margin-bottom: 10px;
+}
+.sb-stat {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 9px 12px;
+    background: #111113;
+    border: 1px solid #1c1c1f;
+    border-radius: 8px;
+    margin-bottom: 6px;
+}
+.sb-stat-key { font-size: 0.73rem; color: #71717a; }
+.sb-stat-val { font-family: 'JetBrains Mono', monospace; font-size: 0.73rem; color: #a78bfa; font-weight: 600; }
+
+/* HERO */
+.hero {
+    padding: 36px 0 28px;
+    border-bottom: 1px solid #1c1c1f;
+    margin-bottom: 28px;
+}
+.hero-kicker {
+    display: inline-flex; align-items: center; gap: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.6rem; color: #818cf8;
+    letter-spacing: 2.5px; text-transform: uppercase;
+    margin-bottom: 16px;
+}
+.hero-pulse {
+    width: 7px; height: 7px; border-radius: 50%;
+    background: #818cf8;
+    animation: pulse-anim 2s ease-in-out infinite;
+}
+@keyframes pulse-anim {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(129,140,248,0.4); }
+    50% { opacity: 0.6; box-shadow: 0 0 0 6px rgba(129,140,248,0); }
+}
+.hero-title {
+    font-family: 'Unbounded', sans-serif;
+    font-size: 3.6rem; font-weight: 800;
+    letter-spacing: -2.5px; line-height: 1;
+    color: #fafafa; margin: 0;
+}
+.hero-title em { font-style: normal; color: #818cf8; }
+.hero-sub {
+    margin-top: 14px; color: #52525b;
+    font-size: 0.88rem; line-height: 1.7; max-width: 560px;
+}
+.hero-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 20px; }
+.chip {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.65rem; color: #71717a;
+    background: #111113; border: 1px solid #27272a;
+    border-radius: 20px; padding: 4px 12px;
+}
+.chip b { color: #d4d4d8; }
+
+/* TABS */
 .stTabs [data-baseweb="tab-list"] {
-    gap: 4px;
-    background: rgba(0,255,136,0.02);
-    border: 1px solid rgba(0,255,136,0.07);
-    border-radius: 12px;
+    background: #111113;
+    border: 1px solid #1c1c1f;
+    border-radius: 10px;
     padding: 4px;
+    gap: 2px;
     margin-bottom: 24px;
 }
 .stTabs [data-baseweb="tab"] {
-    height: 40px;
-    background: transparent;
-    border: none;
-    border-radius: 9px;
-    padding: 0 22px;
-    color: #4d5765;
-    font-weight: 600;
-    font-size: 0.82rem;
-    letter-spacing: 0.5px;
-    transition: all 0.25s ease;
+    height: 38px; background: transparent; border: none;
+    border-radius: 7px; padding: 0 20px;
+    color: #52525b; font-weight: 600; font-size: 0.8rem;
+    letter-spacing: 0.3px; transition: all 0.2s ease;
+    cursor: none !important;
 }
-.stTabs [data-baseweb="tab"]:hover {
-    background: rgba(0,255,136,0.06) !important;
-    color: #c9d1d9;
-}
+.stTabs [data-baseweb="tab"]:hover { color: #a1a1aa; background: #18181b !important; }
 .stTabs [aria-selected="true"] {
-    background: linear-gradient(135deg, rgba(0,255,136,0.12), rgba(0,170,255,0.08)) !important;
-    color: #f0f6fc !important;
-    box-shadow: 0 0 20px rgba(0,255,136,0.15), inset 0 1px 0 rgba(0,255,136,0.2);
-    border: 1px solid rgba(0,255,136,0.2) !important;
+    background: #18181b !important;
+    color: #fafafa !important;
+    box-shadow: inset 0 0 0 1px #27272a;
 }
 
-/* ─────────────────────────────────────────────────────── LIBRARY GRID */
-.lib-search-wrap {
-    position:relative; margin-bottom:20px;
+/* SECTION LABEL */
+.sec-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.58rem; color: #3f3f46;
+    letter-spacing: 2px; text-transform: uppercase;
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 18px;
 }
-.lib-stats-bar {
-    display:flex; gap:20px; margin-bottom:20px; align-items:center;
-    padding: 12px 18px;
-    background: rgba(0,255,136,0.02);
-    border: 1px solid rgba(0,255,136,0.07);
-    border-radius:10px;
-}
-.lib-stat { text-align:center; }
-.lib-stat-val { font-family:'Space Mono',monospace; font-size:1.1rem; font-weight:700; color:#00ff88; }
-.lib-stat-label { font-size:0.62rem; color:#4d5765; text-transform:uppercase; letter-spacing:1px; }
-.lib-divider { width:1px; height:30px; background:rgba(255,255,255,0.06); }
+.sec-label::after { content:''; flex:1; height:1px; background:#18181b; }
 
-/* Song card button override */
-[data-testid="column"] .stButton button {
-    background: rgba(255,255,255,0.02) !important;
-    border: 1px solid rgba(255,255,255,0.06) !important;
-    border-radius: 12px !important;
-    padding: 0 !important;
-    width: 100% !important;
-    text-align: left !important;
-    transition: all 0.25s cubic-bezier(0.25,0.46,0.45,0.94) !important;
-    margin-bottom: 16px !important;
-    color: #e6edf3 !important;
-    font-weight: 600 !important;
-    font-size: 0.82rem !important;
-    line-height: 1.4 !important;
-    box-shadow: none !important;
-    cursor: none !important;
+/* ── LIBRARY TABLE ── */
+.track-table { border: 1px solid #1c1c1f; border-radius: 12px; overflow: hidden; }
+.track-header {
+    display: grid;
+    grid-template-columns: 36px 1fr 120px 80px;
+    gap: 0; padding: 10px 18px;
+    background: #111113;
+    border-bottom: 1px solid #1c1c1f;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.58rem; color: #3f3f46;
+    text-transform: uppercase; letter-spacing: 1.5px;
 }
-[data-testid="column"] .stButton button:hover {
-    border-color: rgba(0,255,136,0.35) !important;
-    background: rgba(0,255,136,0.05) !important;
-    transform: translateY(-4px) !important;
-    box-shadow: 0 12px 32px rgba(0,255,136,0.12), 0 0 0 1px rgba(0,255,136,0.15) !important;
-}
-[data-testid="column"] .stButton button:focus {
-    border-color: rgba(0,170,255,0.4) !important;
-    box-shadow: 0 0 0 2px rgba(0,170,255,0.2) !important;
-    outline: none !important;
-}
-
-/* ─────────────────────────────────────────────────────── SONG DETAIL PANEL */
-.song-detail-panel {
-    background: rgba(0,0,0,0.5);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
-    border: 1px solid rgba(0,255,136,0.15);
-    border-radius: 16px;
-    padding: 28px 32px;
-    margin: 0 0 28px;
-    animation: slideDown 0.3s cubic-bezier(0.25,0.46,0.45,0.94);
-    box-shadow: 0 0 80px rgba(0,255,136,0.05), 0 20px 60px rgba(0,0,0,0.4);
-}
-@keyframes slideDown {
-    from { opacity:0; transform:translateY(-16px); }
-    to   { opacity:1; transform:translateY(0); }
-}
-.detail-img {
-    width:100%; border-radius:10px; margin-bottom:12px;
-    border: 1px solid rgba(0,255,136,0.1);
-}
-.detail-stat-row { display:flex; gap:10px; flex-wrap:wrap; margin-top:14px; }
-.detail-stat {
-    background: rgba(0,255,136,0.04);
-    border: 1px solid rgba(0,255,136,0.1);
-    border-radius: 10px;
-    padding: 10px 14px;
-    text-align:center; flex:1; min-width:75px;
-    transition: all 0.2s;
-}
-.detail-stat:hover {
-    background: rgba(0,255,136,0.08);
-    border-color: rgba(0,255,136,0.25);
-}
-.detail-stat-val {
-    font-family:'Space Mono',monospace;
-    font-size:1rem; font-weight:700;
-    background: linear-gradient(135deg,#00ff88,#00aaff);
-    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-}
-.detail-stat-label { font-size:0.6rem; color:#4d5765; text-transform:uppercase; letter-spacing:1px; margin-top:3px; }
-
-/* ─────────────────────────────────────────────────────── IDENTIFY TAB */
-.match-banner {
-    position:relative; overflow:hidden;
-    background: rgba(0,0,0,0.5);
-    backdrop-filter:blur(20px);
-    border: 1px solid rgba(0,255,136,0.25);
-    border-radius: 16px;
-    padding: 28px 32px;
-    margin: 20px 0;
-    animation: slideDown 0.4s ease;
-    box-shadow: 0 0 60px rgba(0,255,136,0.08), inset 0 1px 0 rgba(0,255,136,0.15);
-}
-.match-banner::after {
-    content:'';
-    position:absolute; top:-60%; right:-10%;
-    width:340px; height:340px;
-    background: radial-gradient(circle, rgba(0,255,136,0.06) 0%, transparent 65%);
-    pointer-events:none;
-}
-.match-eyebrow {
-    font-family:'Space Mono',monospace; font-size:0.6rem;
-    color:#00ff88; letter-spacing:3px; text-transform:uppercase;
-    margin-bottom:8px; display:flex; align-items:center; gap:8px;
-}
-.match-song-name {
-    font-family:'Syne',sans-serif; font-size:2.6rem; font-weight:800;
-    color:#f0f6fc; letter-spacing:-1px; line-height:1.1;
-}
-.match-score-badge {
-    display:inline-block;
-    background: linear-gradient(135deg,rgba(0,255,136,0.15),rgba(0,170,255,0.1));
-    color:#00ff88; font-family:'Space Mono',monospace; font-weight:700;
-    font-size:0.88rem; padding:5px 14px; border-radius:8px;
-    border: 1px solid rgba(0,255,136,0.25); margin-top:10px;
-}
-.no-match-banner {
-    background: rgba(110,64,201,0.08);
-    border:1px solid rgba(110,64,201,0.2);
-    border-radius:16px; padding:32px 28px; margin:20px 0; text-align:center;
-    backdrop-filter:blur(12px);
-}
-
-/* ─────────────────────────────────────────────────────── TIMING BAR */
-.timing-bar {
-    display:flex; background:rgba(0,0,0,0.4); border:1px solid rgba(255,255,255,0.06);
-    border-radius:12px; overflow:hidden; margin:18px 0;
-}
-.timing-cell { flex:1; padding:14px 12px; border-right:1px solid rgba(255,255,255,0.05); text-align:center; }
-.timing-cell:last-child { border-right:none; }
-.timing-val {
-    font-family:'Space Mono',monospace; font-size:1.2rem; font-weight:700;
-    background: linear-gradient(135deg,#00aaff,#00ff88);
-    -webkit-background-clip:text; -webkit-text-fill-color:transparent; background-clip:text;
-}
-.timing-label { font-size:0.62rem; color:#4d5765; text-transform:uppercase; letter-spacing:1px; margin-top:3px; }
-
-/* ─────────────────────────────────────────────────────── STEP HEADERS */
-.step-header {
-    display:flex; align-items:center; gap:14px; margin:32px 0 14px;
-    border-left:2px solid rgba(0,255,136,0.3);
-    padding-left:16px;
-}
-.step-num {
-    font-family:'Space Mono',monospace; font-size:0.7rem; font-weight:700;
-    color:#00ff88; background:rgba(0,255,136,0.08); border:1px solid rgba(0,255,136,0.2);
-    border-radius:6px; padding:4px 8px; flex-shrink:0;
-}
-.step-title { font-weight:800; color:#e6edf3; font-size:0.95rem; letter-spacing:0.3px; }
-.step-sub { font-size:0.78rem; color:#4d5765; margin-left:auto; font-family:'Space Mono',monospace; }
-
-/* ─────────────────────────────────────────────────────── CANDIDATE TABLE */
-.cand-table-wrap {
-    background:rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius:12px; overflow:hidden; margin-top:10px;
-    backdrop-filter:blur(8px);
-}
-.cand-row {
-    display:flex; align-items:center; padding:12px 16px;
-    border-bottom:1px solid rgba(255,255,255,0.04); gap:14px;
+.track-row {
+    display: grid;
+    grid-template-columns: 36px 1fr 120px 80px;
+    gap: 0; padding: 12px 18px;
+    border-bottom: 1px solid #0f0f11;
+    align-items: center;
     transition: background 0.15s;
-}
-.cand-row:hover { background:rgba(0,255,136,0.04); }
-.cand-row:last-child { border-bottom:none; }
-.cand-rank { font-family:'Space Mono',monospace; color:#4d5765; font-size:0.78rem; width:30px; flex-shrink:0; }
-.cand-name { font-size:0.88rem; font-weight:600; color:#e6edf3; flex:1; }
-.cand-bar-wrap { width:100px; height:3px; background:rgba(255,255,255,0.06); border-radius:2px; }
-.cand-bar { height:3px; border-radius:2px; transition:width 0.5s ease; }
-.cand-score {
-    font-family:'Space Mono',monospace; font-size:0.75rem;
-    color:#00ff88; background:rgba(0,255,136,0.08);
-    padding:2px 8px; border-radius:5px; border:1px solid rgba(0,255,136,0.15);
-}
-
-/* ─────────────────────────────────────────────────────── BATCH TAB */
-.batch-row {
-    display:flex; align-items:center; padding:11px 16px;
-    border-bottom:1px solid rgba(255,255,255,0.04); gap:12px; transition:background 0.15s;
-}
-.batch-row:hover { background:rgba(0,255,136,0.03); }
-.batch-row:last-child { border-bottom:none; }
-.correct-badge {
-    font-size:0.68rem; font-weight:700; padding:3px 10px;
-    border-radius:20px; flex-shrink:0; font-family:'Space Mono',monospace;
-}
-.correct-badge.match { background:rgba(0,255,136,0.12); color:#00ff88; border:1px solid rgba(0,255,136,0.25); }
-.correct-badge.wrong { background:rgba(248,81,73,0.1); color:#f85149; border:1px solid rgba(248,81,73,0.25); }
-
-/* ─────────────────────────────────────────────────────── SECTION LABEL */
-.section-label {
-    font-family:'Space Mono',monospace; font-size:0.6rem; color:#4d5765;
-    letter-spacing:2.5px; text-transform:uppercase; margin-bottom:16px;
-    display:flex; align-items:center; gap:10px;
-}
-.section-label::before {
-    content:'';
-    display:inline-block; width:16px; height:1.5px;
-    background: linear-gradient(90deg,#00ff88,transparent);
-}
-
-/* ─────────────────────────────────────────────────────── BUTTONS */
-.stButton > button {
-    background: linear-gradient(135deg, rgba(0,255,136,0.12), rgba(0,170,255,0.08)) !important;
-    border: 1px solid rgba(0,255,136,0.25) !important;
-    color: #00ff88 !important;
-    font-weight: 700 !important;
-    border-radius: 10px !important;
-    transition: all 0.25s ease !important;
-    padding: 9px 24px !important;
-    font-family:'Inter',sans-serif !important;
-    letter-spacing:0.3px !important;
     cursor: none !important;
+}
+.track-row:last-child { border-bottom: none; }
+.track-row:hover { background: #111113; }
+.track-row.selected { background: rgba(129,140,248,0.07); border-left: 2px solid #818cf8; }
+.track-num { font-family:'JetBrains Mono',monospace; font-size:0.72rem; color:#3f3f46; }
+.track-name { font-size: 0.85rem; font-weight: 600; color: #e4e4e7; }
+.track-bar-wrap { height: 3px; background: #1c1c1f; border-radius: 3px; overflow: hidden; }
+.track-bar { height: 3px; border-radius: 3px; background: linear-gradient(90deg, #6366f1, #818cf8); }
+.track-hash { font-family:'JetBrains Mono',monospace; font-size:0.68rem; color:#52525b; text-align:right; }
+
+/* EXPANDED TRACK DETAIL */
+.track-detail {
+    margin: 0 0 20px;
+    background: #111113;
+    border: 1px solid #27272a;
+    border-radius: 12px;
+    padding: 22px 26px;
+    animation: fadeIn 0.2s ease;
+}
+@keyframes fadeIn { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+.td-title { font-family:'Unbounded',sans-serif; font-size:1.4rem; font-weight:800; color:#fafafa; letter-spacing:-0.5px; margin-bottom:6px; }
+.td-meta { font-family:'JetBrains Mono',monospace; font-size:0.62rem; color:#3f3f46; letter-spacing:1px; text-transform:uppercase; margin-bottom:18px; }
+.td-stats { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
+.td-stat {
+    background: #0c0c0e; border: 1px solid #1c1c1f;
+    border-radius: 8px; padding: 10px 16px; text-align: center; flex:1; min-width:80px;
+}
+.td-stat-val { font-family:'JetBrains Mono',monospace; font-size:1rem; font-weight:700; color:#818cf8; }
+.td-stat-key { font-size:0.6rem; color:#3f3f46; text-transform:uppercase; letter-spacing:1px; margin-top:3px; }
+
+/* IDENTIFY TAB */
+.upload-zone {
+    border: 1.5px dashed #27272a;
+    border-radius: 12px;
+    background: #0c0c0e;
+    transition: border-color 0.2s, background 0.2s;
+}
+.timing-strip {
+    display: flex; margin: 16px 0;
+    background: #111113; border: 1px solid #1c1c1f;
+    border-radius: 10px; overflow: hidden;
+}
+.t-cell { flex:1; padding:12px; text-align:center; border-right:1px solid #1c1c1f; }
+.t-cell:last-child { border-right:none; }
+.t-val { font-family:'JetBrains Mono',monospace; font-size:1.1rem; font-weight:700; color:#818cf8; }
+.t-lbl { font-size:0.6rem; color:#3f3f46; text-transform:uppercase; letter-spacing:1px; margin-top:3px; }
+
+.result-card {
+    background: #111113; border: 1px solid #27272a; border-radius: 14px;
+    padding: 26px 30px; margin: 18px 0; position:relative; overflow:hidden;
+    animation: fadeIn 0.3s ease;
+}
+.result-card.matched { border-color: rgba(129,140,248,0.35); box-shadow: 0 0 40px rgba(129,140,248,0.06); }
+.result-card.nomatch { border-color: #27272a; }
+.result-eyebrow {
+    font-family:'JetBrains Mono',monospace; font-size:0.58rem;
+    letter-spacing:2.5px; text-transform:uppercase; margin-bottom:10px;
+    display:flex; align-items:center; gap:8px;
+}
+.result-eyebrow.ok { color:#818cf8; }
+.result-eyebrow.fail { color:#52525b; }
+.result-song { font-family:'Unbounded',sans-serif; font-size:2rem; font-weight:800; color:#fafafa; letter-spacing:-1px; line-height:1.1; }
+.result-badge {
+    display:inline-block; margin-top:12px;
+    background: rgba(129,140,248,0.1); border:1px solid rgba(129,140,248,0.25);
+    color:#818cf8; font-family:'JetBrains Mono',monospace;
+    font-size:0.75rem; padding:5px 14px; border-radius:7px;
+}
+
+.step-hdr {
+    display:flex; align-items:center; gap:12px;
+    border-left: 2px solid #27272a; padding-left:14px;
+    margin: 28px 0 14px;
+}
+.step-n {
+    font-family:'JetBrains Mono',monospace; font-size:0.62rem; font-weight:600;
+    color:#818cf8; background:rgba(129,140,248,0.1); border:1px solid rgba(129,140,248,0.2);
+    border-radius:5px; padding:3px 8px;
+}
+.step-t { font-weight:700; font-size:0.88rem; color:#e4e4e7; }
+.step-s { font-family:'JetBrains Mono',monospace; font-size:0.65rem; color:#3f3f46; margin-left:auto; }
+
+/* CANDIDATE TABLE */
+.cand-wrap { background:#111113; border:1px solid #1c1c1f; border-radius:10px; overflow:hidden; margin-top:10px; }
+.cand-row { display:flex; align-items:center; padding:11px 16px; border-bottom:1px solid #0f0f11; gap:14px; transition:background 0.1s; }
+.cand-row:hover { background:#18181b; }
+.cand-row:last-child { border-bottom:none; }
+.cand-rank { font-family:'JetBrains Mono',monospace; color:#3f3f46; font-size:0.72rem; width:28px; flex-shrink:0; }
+.cand-name { font-size:0.85rem; font-weight:600; color:#e4e4e7; flex:1; }
+.cand-bar-wrap { width:90px; height:2px; background:#1c1c1f; border-radius:2px; }
+.cand-bar { height:2px; border-radius:2px; }
+.cand-score { font-family:'JetBrains Mono',monospace; font-size:0.68rem; color:#818cf8; background:rgba(129,140,248,0.08); padding:2px 8px; border-radius:5px; }
+
+/* BATCH TAB */
+.batch-table-wrap { background:#111113; border:1px solid #1c1c1f; border-radius:10px; overflow:hidden; margin-top:10px; }
+.batch-row { display:flex; align-items:center; padding:10px 16px; border-bottom:1px solid #0f0f11; gap:12px; }
+.batch-row:hover { background:#18181b; }
+.batch-row:last-child { border-bottom:none; }
+.badge-ok { font-family:'JetBrains Mono',monospace; font-size:0.62rem; font-weight:700; padding:3px 9px; border-radius:20px; background:rgba(129,140,248,0.1); color:#818cf8; border:1px solid rgba(129,140,248,0.25); }
+.badge-fail { font-family:'JetBrains Mono',monospace; font-size:0.62rem; font-weight:700; padding:3px 9px; border-radius:20px; background:rgba(248,113,113,0.08); color:#f87171; border:1px solid rgba(248,113,113,0.2); }
+.stat-box { background:#111113; border:1px solid #1c1c1f; border-radius:10px; padding:14px 18px; text-align:center; }
+.stat-box-val { font-family:'JetBrains Mono',monospace; font-size:1.5rem; font-weight:700; color:#818cf8; }
+.stat-box-key { font-size:0.65rem; color:#3f3f46; text-transform:uppercase; letter-spacing:1px; margin-top:3px; }
+
+/* HOW IT WORKS */
+.hw-card { background:#111113; border:1px solid #1c1c1f; border-radius:12px; padding:20px; margin-bottom:12px; transition:border-color 0.2s; }
+.hw-card:hover { border-color:#27272a; }
+.hw-icon { font-size:1.4rem; margin-bottom:10px; }
+.hw-title { font-weight:800; font-size:0.88rem; color:#e4e4e7; margin-bottom:6px; }
+.hw-desc { font-size:0.75rem; color:#52525b; line-height:1.75; }
+
+/* OVERRIDES */
+.stButton > button {
+    background: #18181b !important; border: 1px solid #27272a !important;
+    color: #e4e4e7 !important; font-weight:600 !important;
+    border-radius:9px !important; transition:all 0.2s !important;
+    padding:9px 22px !important; cursor: none !important;
 }
 .stButton > button:hover {
-    background: linear-gradient(135deg, rgba(0,255,136,0.2), rgba(0,170,255,0.15)) !important;
-    border-color: rgba(0,255,136,0.5) !important;
-    transform: translateY(-2px) !important;
-    box-shadow: 0 8px 24px rgba(0,255,136,0.2) !important;
-    color: #fff !important;
+    background: #27272a !important; border-color:#3f3f46 !important;
+    transform:translateY(-1px) !important; box-shadow:0 4px 16px rgba(0,0,0,0.4) !important;
 }
-.stButton > button:active { transform:translateY(0) !important; }
-
-/* ─────────────────────────────────────────────────────── FILE UPLOADER */
-[data-testid="stFileUploader"] {
-    border: 1px dashed rgba(0,255,136,0.2) !important;
-    border-radius: 12px !important;
-    background: rgba(0,255,136,0.02) !important;
-    transition: border-color 0.2s, background 0.2s !important;
-}
-[data-testid="stFileUploader"]:hover {
-    border-color: rgba(0,255,136,0.4) !important;
-    background: rgba(0,255,136,0.04) !important;
-}
-
-/* ─────────────────────────────────────────────────────── MISC */
-audio { border-radius:10px; width:100%; margin-top:10px; }
-.stDataFrame { border-radius:10px; overflow:hidden; }
-.stProgress > div > div > div { background: linear-gradient(90deg,#00ff88,#00aaff) !important; border-radius:10px; }
+.stProgress > div > div > div { background: linear-gradient(90deg,#6366f1,#818cf8) !important; border-radius:4px; }
 .stTextInput input {
-    background: rgba(0,0,0,0.4) !important;
-    border: 1px solid rgba(0,255,136,0.15) !important;
-    border-radius: 10px !important;
-    color: #e6edf3 !important;
-    transition: border-color 0.2s !important;
+    background:#111113 !important; border:1px solid #1c1c1f !important;
+    border-radius:9px !important; color:#e4e4e7 !important;
+    font-size:0.85rem !important;
 }
-.stTextInput input:focus {
-    border-color: rgba(0,255,136,0.4) !important;
-    box-shadow: 0 0 0 3px rgba(0,255,136,0.08) !important;
+.stTextInput input:focus { border-color:#3f3f46 !important; box-shadow:none !important; }
+.stTextInput input::placeholder { color:#3f3f46 !important; }
+[data-testid="stFileUploader"] {
+    border: 1.5px dashed #27272a !important; border-radius:12px !important;
+    background:#0c0c0e !important;
 }
-.stTextInput input::placeholder { color:#4d5765 !important; }
-
-/* ─────────────────────────────────────────────────────── ABOUT TAB FEATURE CARDS */
-.feature-card {
-    background: rgba(0,0,0,0.35);
-    border: 1px solid rgba(255,255,255,0.07);
-    border-radius: 14px;
-    padding: 22px;
-    transition: all 0.3s cubic-bezier(0.25,0.46,0.45,0.94);
-    height:100%;
+audio { border-radius:8px; width:100%; }
+[data-testid="column"] .stButton button {
+    background:#111113 !important; border:1px solid #1c1c1f !important;
+    border-radius:10px !important; padding:0 !important; width:100% !important;
+    text-align:left !important; transition:all 0.2s !important;
+    margin-bottom:0 !important; color:#e4e4e7 !important;
+    font-weight:600 !important; font-size:0.82rem !important;
+    cursor:none !important;
 }
-.feature-card:hover {
-    border-color: rgba(0,255,136,0.2);
-    background: rgba(0,255,136,0.03);
-    transform: translateY(-3px);
-    box-shadow: 0 16px 40px rgba(0,0,0,0.4);
-}
-.feature-icon { font-size:1.8rem; margin-bottom:12px; }
-.feature-title { font-weight:800; color:#e6edf3; font-size:0.92rem; margin-bottom:6px; }
-.feature-desc { font-size:0.78rem; color:#4d5765; line-height:1.7; }
-
-/* ─────────────────────────────────────────────────────── COMPLEXITY TABLE */
-.complexity-row {
-    display:grid; grid-template-columns:1fr 1fr 1fr 1fr;
-    gap:1px; background:rgba(255,255,255,0.04);
-}
-.complexity-cell {
-    background:#05080d; padding:10px 14px; font-size:0.78rem; color:#8b949e;
-}
-.complexity-cell.header { color:#6e7681; font-family:'Space Mono',monospace; font-size:0.65rem; text-transform:uppercase; }
-.complexity-cell.green { color:#00ff88; font-family:'Space Mono',monospace; }
-.complexity-cell.blue  { color:#00aaff; font-family:'Space Mono',monospace; }
 </style>
 """, unsafe_allow_html=True)
 
-# ─── CURSOR JS (smooth, low-key ring) ────────────────────────────────────────
-st.markdown("""
-<div id="cursor-ring"></div>
-<div id="cursor-dot"></div>
+# ─────────────────────────────────────────────────────────── CURSOR (components)
+components.html("""
+<style>
+#ss-ring {
+    position:fixed; top:0; left:0; pointer-events:none; z-index:2147483647;
+    width:24px; height:24px; border-radius:50%;
+    border: 1.5px solid rgba(129,140,248,0.8);
+    transform:translate(-50%,-50%);
+    transition: width 0.25s, height 0.25s, border-color 0.25s, background 0.25s;
+}
+#ss-dot {
+    position:fixed; top:0; left:0; pointer-events:none; z-index:2147483647;
+    width:4px; height:4px; border-radius:50%;
+    background:#818cf8; transform:translate(-50%,-50%);
+}
+</style>
+<div id="ss-ring"></div>
+<div id="ss-dot"></div>
 <script>
-(function(){
-    const ring = document.getElementById('cursor-ring');
-    const dot  = document.getElementById('cursor-dot');
-    if(!ring || !dot) return;
-    let mx=0,my=0,rx=0,ry=0;
-    document.addEventListener('mousemove', e=>{
-        mx=e.clientX; my=e.clientY;
-        dot.style.left=mx+'px'; dot.style.top=my+'px';
-    });
-    // Smooth lag on ring
-    (function lerp(){
-        rx += (mx-rx)*0.12; ry += (my-ry)*0.12;
-        ring.style.left=rx+'px'; ring.style.top=ry+'px';
-        requestAnimationFrame(lerp);
-    })();
-    // Scale up on hoverable elements
-    document.addEventListener('mouseover', e=>{
-        if(e.target.matches('button,a,[role="button"],input,label')){
-            ring.style.width='44px'; ring.style.height='44px';
-            ring.style.borderColor='rgba(0,255,136,1)';
-            ring.style.background='rgba(0,255,136,0.06)';
-        }
-    });
-    document.addEventListener('mouseout', e=>{
-        if(e.target.matches('button,a,[role="button"],input,label')){
-            ring.style.width='28px'; ring.style.height='28px';
-            ring.style.borderColor='rgba(0,255,136,0.7)';
-            ring.style.background='';
-        }
-    });
-})();
+var ring=document.getElementById('ss-ring'), dot=document.getElementById('ss-dot');
+var mx=0, my=0, rx=0, ry=0, running=false;
+function step(){
+    rx += (mx-rx)*0.10;
+    ry += (my-ry)*0.10;
+    ring.style.left=rx+'px'; ring.style.top=ry+'px';
+    requestAnimationFrame(step);
+}
+window.addEventListener('mousemove', function(e){
+    mx=e.clientX; my=e.clientY;
+    dot.style.left=mx+'px'; dot.style.top=my+'px';
+    if(!running){ running=true; step(); }
+}, true);
+document.addEventListener('mouseover', function(e){
+    if(e.target && (e.target.tagName==='BUTTON'||e.target.tagName==='A'||e.target.tagName==='INPUT')){
+        ring.style.width='36px'; ring.style.height='36px';
+        ring.style.borderColor='rgba(129,140,248,1)';
+        ring.style.background='rgba(129,140,248,0.05)';
+    }
+}, true);
+document.addEventListener('mouseout', function(e){
+    if(e.target && (e.target.tagName==='BUTTON'||e.target.tagName==='A'||e.target.tagName==='INPUT')){
+        ring.style.width='24px'; ring.style.height='24px';
+        ring.style.borderColor='rgba(129,140,248,0.8)';
+        ring.style.background='';
+    }
+}, true);
 </script>
-""", unsafe_allow_html=True)
+""", height=0)
 
-# ─── MATPLOTLIB THEME ────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────── MATPLOTLIB
 plt.rcParams.update({
-    'figure.facecolor':  '#05080d',
-    'axes.facecolor':    '#08101a',
-    'axes.edgecolor':    '#1a2233',
-    'axes.labelcolor':   '#4d5765',
-    'xtick.color':       '#4d5765',
-    'ytick.color':       '#4d5765',
-    'text.color':        '#c9d1d9',
-    'grid.color':        '#111827',
-    'grid.linestyle':    '--',
-    'grid.alpha':        0.4,
-    'font.family':       'DejaVu Sans',
+    'figure.facecolor':'#0c0c0e','axes.facecolor':'#111113',
+    'axes.edgecolor':'#1c1c1f','axes.labelcolor':'#52525b',
+    'xtick.color':'#3f3f46','ytick.color':'#3f3f46',
+    'text.color':'#e4e4e7','grid.color':'#18181b',
+    'grid.linestyle':'--','grid.alpha':0.5,'font.family':'DejaVu Sans',
 })
 
-# ─── LOAD SYSTEM ─────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────── LOAD
 @st.cache_resource(show_spinner=False)
 def load_system():
-    recognizer = AudioRecognizer(sr=11025)
+    r = AudioRecognizer(sr=11025)
     db = SongDatabase(db_path="song_db.pkl")
-    loaded = db.load()
-    return recognizer, db, loaded
+    ok = db.load()
+    return r, db, ok
 
-with st.spinner("🔄 Loading fingerprint database…"):
+with st.spinner("Loading database…"):
     recognizer, db, db_loaded = load_system()
 
 if not db_loaded:
-    st.error("🚫 `song_db.pkl` not found. Run `build_database.py` first.")
+    st.error("song_db.pkl not found — run build_database.py first.")
     st.stop()
 
-# ─── PRECOMPUTE ───────────────────────────────────────────────────────────────
-def compute_song_hash_counts(db):
-    counts = {sid: 0 for sid in db.song_names}
+def get_hash_counts(db):
+    c = {sid:0 for sid in db.song_names}
     for matches in db.hash_dict.values():
-        for sid, _ in matches:
-            counts[sid] = counts.get(sid, 0) + 1
-    return counts
+        for sid,_ in matches:
+            c[sid] = c.get(sid,0)+1
+    return c
 
-song_hash_counts = compute_song_hash_counts(db)
+song_hash_counts = get_hash_counts(db)
 total_songs  = len(db.song_names)
 total_hashes = len(db.hash_dict)
-avg_hashes   = int(sum(song_hash_counts.values()) / max(total_songs, 1))
+avg_hashes   = int(sum(song_hash_counts.values())/max(total_songs,1))
+max_hashes   = max(song_hash_counts.values()) if song_hash_counts else 1
 
-# ─── SIDEBAR ─────────────────────────────────────────────────────────────────
+# ─────────────────────────────────────────────────────────── SIDEBAR
 with st.sidebar:
-    st.markdown('<div class="sidebar-section-title">⬡ System Status</div>', unsafe_allow_html=True)
-    st.markdown(f"""
-    <div class="sys-card">
-        <div class="sys-card-val">{total_songs}</div>
-        <div class="sys-card-label">Songs Indexed</div>
-    </div>
-    <div class="sys-card">
-        <div class="sys-card-val">{total_hashes:,}</div>
-        <div class="sys-card-label">Unique Hash Keys</div>
-    </div>
-    <div class="sys-card">
-        <div class="sys-card-val">{avg_hashes:,}</div>
-        <div class="sys-card-label">Avg. Hashes / Song</div>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="sb-logo">Sound<span>Scope</span></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sb-tagline">Audio Fingerprinting Engine</div>', unsafe_allow_html=True)
 
-    st.markdown('<hr style="border-color:rgba(255,255,255,0.05);margin:16px 0;">', unsafe_allow_html=True)
-    st.markdown('<div class="sidebar-section-title">⬡ Algorithm Params</div>', unsafe_allow_html=True)
-    params = [
-        ("sample_rate", "11,025 Hz"),
-        ("n_fft", "2,048"),
-        ("hop_length", "512"),
-        ("peak_neighborhood", "15×15"),
-        ("fan_out", "20 targets"),
-        ("threshold", "15 hashes"),
-    ]
-    for k, v in params:
-        st.markdown(f"""
-        <div class="algo-param">
-            <span class="algo-key">{k}</span>
-            <span class="algo-val">{v}</span>
-        </div>""", unsafe_allow_html=True)
+    st.markdown('<div class="sb-label">Database</div>', unsafe_allow_html=True)
+    for k, v in [("Songs indexed", str(total_songs)),
+                 ("Unique hash keys", f"{total_hashes:,}"),
+                 ("Avg hashes / song", f"{avg_hashes:,}"),
+                 ("Index type", "Full song")]:
+        st.markdown(f'<div class="sb-stat"><span class="sb-stat-key">{k}</span><span class="sb-stat-val">{v}</span></div>', unsafe_allow_html=True)
 
-    st.markdown('<hr style="border-color:rgba(255,255,255,0.05);margin:16px 0;">', unsafe_allow_html=True)
-    st.markdown("""
-    <div style="font-size:0.68rem;color:#2d3748;line-height:1.8;">
-        EE200 · Signals, Systems &amp; Networks<br>
-        <span style="color:#4d5765;">Summer 2026 · IIT Kanpur</span><br>
-        <span style="color:#00ff88;font-family:'Space Mono',monospace;font-size:0.6rem;">Zapptain America</span>
-    </div>
-    """, unsafe_allow_html=True)
+    st.markdown('<div class="sb-divider"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="sb-label">Algorithm</div>', unsafe_allow_html=True)
+    for k, v in [("sample rate","11,025 Hz"),("n_fft","2,048"),("hop_length","512"),
+                 ("neighborhood","15×15"),("fan out","20"),("min score","15")]:
+        st.markdown(f'<div class="sb-stat"><span class="sb-stat-key">{k}</span><span class="sb-stat-val">{v}</span></div>', unsafe_allow_html=True)
 
-# ─── HERO HEADER ─────────────────────────────────────────────────────────────
+    st.markdown('<div class="sb-divider"></div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:0.65rem;color:#27272a;line-height:1.8;">EE200 · IIT Kanpur · 2026</div>', unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────────────────── HERO
 st.markdown(f"""
-<div class="hero-wrap">
-    <div class="hero-eyebrow">
-        <span class="hero-eyebrow-dot"></span>
-        EE200 · Audio Fingerprinting System · Live
-    </div>
-    <div class="hero-title">Zapptain <span class="accent">America</span></div>
-    <div class="hero-sub">
-        A Shazam-style audio fingerprinting engine. Index {total_songs} songs as sparse constellation maps,
-        then identify any short clip against the database in milliseconds — robust to noise, cropping, and distortion.
-    </div>
-    <div class="hero-pills">
-        <span class="hero-pill"><b>{total_songs}</b> songs</span>
-        <span class="hero-pill"><b>{total_hashes:,}</b> hash keys</span>
-        <span class="hero-pill"><b>Shazam</b>-style algorithm</span>
-        <span class="hero-pill"><b>100%</b> accuracy on test set</span>
-        <span class="hero-pill"><b>Full-song</b> indexed</span>
-    </div>
+<div class="hero">
+  <div class="hero-kicker"><span class="hero-pulse"></span>Live · EE200 Project Demo</div>
+  <div class="hero-title">Sound<em>Scope</em></div>
+  <div class="hero-sub">
+    A Shazam-style audio fingerprinting engine. Index {total_songs} songs as sparse constellation maps,
+    then identify any short clip in milliseconds — robust to noise and cropping.
+  </div>
+  <div class="hero-chips">
+    <span class="chip"><b>{total_songs}</b> songs</span>
+    <span class="chip"><b>{total_hashes:,}</b> hash keys</span>
+    <span class="chip"><b>STFT</b> + peak pairing</span>
+    <span class="chip"><b>O(1)</b> lookup per hash</span>
+    <span class="chip"><b>100%</b> test accuracy</span>
+  </div>
 </div>
 """, unsafe_allow_html=True)
 
-# ─── TABS ────────────────────────────────────────────────────────────────────
-tab_lib, tab_id, tab_batch, tab_about = st.tabs([
-    "🎵  LIBRARY",
-    "🔍  IDENTIFY",
-    "📊  BATCH TEST",
-    "⚗️  HOW IT WORKS",
+# ─────────────────────────────────────────────────────────── TABS
+tab_lib, tab_id, tab_batch, tab_how = st.tabs([
+    "◫  LIBRARY", "◈  IDENTIFY", "▦  BATCH TEST", "◉  HOW IT WORKS"
 ])
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 1 · LIBRARY
-# ══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════
+# TAB 1 — LIBRARY  (clean track list, no constellation images)
+# ══════════════════════════════════════════════════════════════════════
 with tab_lib:
-    # ── Stats Bar ─────────────────────────────────────────────────────────────
-    st.markdown(f"""
-    <div class="lib-stats-bar">
-        <div class="lib-stat">
-            <div class="lib-stat-val">{total_songs}</div>
-            <div class="lib-stat-label">Total Tracks</div>
-        </div>
-        <div class="lib-divider"></div>
-        <div class="lib-stat">
-            <div class="lib-stat-val">{total_hashes:,}</div>
-            <div class="lib-stat-label">Total Hash Keys</div>
-        </div>
-        <div class="lib-divider"></div>
-        <div class="lib-stat">
-            <div class="lib-stat-val">{avg_hashes:,}</div>
-            <div class="lib-stat-label">Avg Hashes/Song</div>
-        </div>
-        <div class="lib-divider"></div>
-        <div class="lib-stat">
-            <div class="lib-stat-val">11kHz</div>
-            <div class="lib-stat-label">Sample Rate</div>
-        </div>
-        <div class="lib-divider"></div>
-        <div class="lib-stat">
-            <div class="lib-stat-val">Full</div>
-            <div class="lib-stat-label">Indexed Duration</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
+    search = st.text_input("", placeholder="Search tracks…", label_visibility="collapsed")
 
-    # ── Search ────────────────────────────────────────────────────────────────
-    search_query = st.text_input("", placeholder="🔎  Search songs by name…", label_visibility="collapsed")
-
-    filtered = {
-        sid: name for sid, name in sorted(db.song_names.items(), key=lambda x: x[1])
-        if search_query.lower() in name.lower()
-    }
+    sorted_songs = sorted(db.song_names.items(), key=lambda x: x[1])
+    filtered = [(sid,name) for sid,name in sorted_songs if search.lower() in name.lower()]
 
     if not filtered:
-        st.warning("No songs match your search.")
+        st.warning("No tracks match.")
     else:
-        st.markdown(f'<div class="section-label">Showing {len(filtered)} of {total_songs} tracks</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="sec-label">Showing {len(filtered)} of {total_songs} tracks</div>', unsafe_allow_html=True)
 
-        if 'selected_song_id' not in st.session_state:
-            st.session_state.selected_song_id = None
+        if "sel_sid" not in st.session_state:
+            st.session_state.sel_sid = None
 
-        detail_placeholder = st.container()
+        # Detail panel placeholder above list
+        detail_ph = st.container()
 
-        cols = st.columns(4)
-        for i, (sid, name) in enumerate(filtered.items()):
-            img_b64 = db.song_images.get(sid, "")
-            hcount  = song_hash_counts.get(sid, 0)
-            with cols[i % 4]:
-                if img_b64:
-                    st.markdown(
-                        f'<img src="data:image/png;base64,{img_b64}" '
-                        f'style="width:100%;border-radius:10px 10px 0 0;display:block;margin-bottom:-8px;'
-                        f'border:1px solid rgba(0,255,136,0.08);border-bottom:none;" />',
-                        unsafe_allow_html=True
-                    )
-                btn_label = f"{name}\n{hcount:,} hashes"
-                if st.button(btn_label, key=f"song_btn_{sid}", use_container_width=True):
-                    if st.session_state.selected_song_id == sid:
-                        st.session_state.selected_song_id = None
-                    else:
-                        st.session_state.selected_song_id = sid
-
-        # ── Song Detail Panel ─────────────────────────────────────────────────
-        sel_sid = st.session_state.selected_song_id
-        if sel_sid is not None and sel_sid in db.song_names:
-            sel_name   = db.song_names[sel_sid]
-            sel_img    = db.song_images.get(sel_sid, "")
-            sel_hcount = song_hash_counts.get(sel_sid, 0)
-
-            img_html = (
-                f'<img class="detail-img" src="data:image/png;base64,{sel_img}" />'
-                if sel_img else
-                '<div style="height:130px;background:rgba(0,255,136,0.04);border-radius:10px;'
-                'display:flex;align-items:center;justify-content:center;font-size:2.5rem;'
-                'border:1px solid rgba(0,255,136,0.1);">🎵</div>'
-            )
-
-            with detail_placeholder:
-                st.markdown(f"""
-                <div class="song-detail-panel">
-                    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
-                        <div style="font-family:'Space Mono',monospace;font-size:0.58rem;
-                                    color:#00ff88;letter-spacing:3px;text-transform:uppercase;">
-                            ◆ Song Details
-                        </div>
-                        <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(0,255,136,0.3),transparent);"></div>
-                        <div style="font-size:0.72rem;color:#2d3748;cursor:none;">click again to close</div>
-                    </div>
-                    <div style="display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start;">
-                        <div style="flex:1;min-width:200px;">{img_html}</div>
-                        <div style="flex:2.5;min-width:240px;">
-                            <div style="font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;
-                                        color:#f0f6fc;letter-spacing:-0.5px;line-height:1.2;margin-bottom:6px;">
-                                {sel_name}
-                            </div>
-                            <div style="font-size:0.75rem;color:#4d5765;margin-bottom:16px;font-family:'Space Mono',monospace;">
-                                SONG ID #{sel_sid} &nbsp;·&nbsp; FULL DURATION INDEXED &nbsp;·&nbsp; 11,025 Hz SR
-                            </div>
-                            <div class="detail-stat-row">
-                                <div class="detail-stat">
-                                    <div class="detail-stat-val">{sel_hcount:,}</div>
-                                    <div class="detail-stat-label">Total Hashes</div>
-                                </div>
-                                <div class="detail-stat">
-                                    <div class="detail-stat-val">#{sel_sid}</div>
-                                    <div class="detail-stat-label">Song ID</div>
-                                </div>
-                                <div class="detail-stat">
-                                    <div class="detail-stat-val">Full</div>
-                                    <div class="detail-stat-label">Duration</div>
-                                </div>
-                                <div class="detail-stat">
-                                    <div class="detail-stat-val">11k</div>
-                                    <div class="detail-stat-label">Sample Rate</div>
-                                </div>
-                            </div>
-                            <div style="margin-top:16px;font-size:0.78rem;color:#4d5765;line-height:1.8;
-                                        border-top:1px solid rgba(255,255,255,0.04);padding-top:14px;">
-                                Acoustic fingerprint generated from <span style="color:#00ff88;">strongest local spectral peaks</span>
-                                in the log-magnitude STFT spectrogram. Pairs of anchor+target peaks within a target zone
-                                produce unique <span style="color:#00aaff;font-family:'Space Mono',monospace;">(f₁, f₂, Δt)</span> hashes.
-                                A {sel_hcount:,}-hash fingerprint is robust to noise, MP3 compression, and cropping.
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                mp3_path = os.path.join("EE200_course_project_data_2026", "Q3_database", f"{sel_name}.mp3")
-                if os.path.exists(mp3_path):
-                    st.markdown("""
-                    <div style="font-family:'Space Mono',monospace;font-size:0.6rem;color:#4d5765;
-                                letter-spacing:2px;text-transform:uppercase;margin:0 0 6px 2px;">
-                        ◆ Original Track
-                    </div>""", unsafe_allow_html=True)
-                    st.audio(mp3_path)
-
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 2 · IDENTIFY
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_id:
-    st.markdown('<div class="section-label">Upload an audio clip to fingerprint and identify</div>', unsafe_allow_html=True)
-
-    uploaded_file = st.file_uploader(
-        "Drop an MP3 or WAV file here",
-        type=["mp3", "wav"],
-        label_visibility="collapsed"
-    )
-
-    if uploaded_file:
+        # Track table
         st.markdown("""
-        <div style="font-family:'Space Mono',monospace;font-size:0.6rem;color:#4d5765;
-                    letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">
-            ◆ Your Query Clip
-        </div>""", unsafe_allow_html=True)
-        st.audio(uploaded_file)
+        <div class="track-table">
+          <div class="track-header">
+            <div>#</div><div>TITLE</div><div>DENSITY</div><div style="text-align:right">HASHES</div>
+          </div>""", unsafe_allow_html=True)
 
-        if "identify_result" not in st.session_state:
-            st.session_state.identify_result = None
-
-        if st.button("⚡  Identify Song", key="identify_btn"):
-            with st.spinner("Fingerprinting audio…"):
-                t_start = time.time()
-                tmp_path = None
-                try:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-                        tmp.write(uploaded_file.getvalue())
-                        tmp_path = tmp.name
-                    t0=time.time(); spectrogram, y = recognizer.get_spectrogram(tmp_path); t_spec =int((time.time()-t0)*1000)
-                    t0=time.time(); freqs, times   = recognizer.extract_peaks(spectrogram, percentile=90); t_const=int((time.time()-t0)*1000)
-                    t0=time.time(); hashes         = recognizer.generate_hashes(freqs, times); t_hash =int((time.time()-t0)*1000)
-                    t0=time.time(); results        = db.match_hashes(hashes); t_match=int((time.time()-t0)*1000)
-                    t_total = int((time.time()-t_start)*1000)
-                    st.session_state.identify_result = dict(
-                        spectrogram=spectrogram, y=y, freqs=freqs, times=times,
-                        hashes=hashes, results=results,
-                        t_spec=t_spec, t_const=t_const, t_hash=t_hash, t_match=t_match, t_total=t_total
-                    )
-                except Exception as e:
-                    st.error(f"Error: {e}")
-                finally:
-                    if tmp_path and os.path.exists(tmp_path):
-                        os.unlink(tmp_path)
-
-        if st.session_state.identify_result:
-            R = st.session_state.identify_result
-            spectrogram = R['spectrogram']; y=R['y']; freqs=R['freqs']; times=R['times']
-            results=R['results']
-
-            # ── Timing Bar ──────────────────────────────────────────────────
+        for idx, (sid, name) in enumerate(filtered, 1):
+            hc  = song_hash_counts.get(sid, 0)
+            pct = int(hc / max_hashes * 100)
+            sel = "selected" if st.session_state.sel_sid == sid else ""
             st.markdown(f"""
-            <div class="timing-bar">
-                <div class="timing-cell"><div class="timing-val">{R['t_spec']} ms</div><div class="timing-label">Spectrogram</div></div>
-                <div class="timing-cell"><div class="timing-val">{R['t_const']} ms</div><div class="timing-label">Constellation</div></div>
-                <div class="timing-cell"><div class="timing-val">{R['t_hash']} ms</div><div class="timing-label">Hashing</div></div>
-                <div class="timing-cell"><div class="timing-val">{R['t_match']} ms</div><div class="timing-label">DB Lookup</div></div>
-                <div class="timing-cell"><div class="timing-val">{R['t_total']} ms</div><div class="timing-label">⚡ Total</div></div>
-            </div>
-            """, unsafe_allow_html=True)
+            <div class="track-row {sel}" onclick="">
+              <div class="track-num">{idx:02d}</div>
+              <div class="track-name">{name}</div>
+              <div><div class="track-bar-wrap"><div class="track-bar" style="width:{pct}%"></div></div></div>
+              <div class="track-hash">{hc:,}</div>
+            </div>""", unsafe_allow_html=True)
 
-            if not results or results[0]['score'] < 15:
-                st.markdown("""
-                <div class="no-match-banner">
-                    <div style="font-size:2.5rem;margin-bottom:10px;">❓</div>
-                    <div style="font-weight:800;color:#e6edf3;font-size:1.15rem;margin-bottom:6px;">No match found</div>
-                    <div style="font-size:0.82rem;color:#4d5765;">This clip doesn't appear to be in the database.</div>
-                </div>
-                """, unsafe_allow_html=True)
-            else:
-                best = results[0]
-                top_score = best['score']
+            # invisible Streamlit button drives the click
+            if st.button("▷", key=f"t_{sid}", help=f"View {name}"):
+                st.session_state.sel_sid = None if st.session_state.sel_sid == sid else sid
+                st.rerun()
 
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # ── Detail panel ──────────────────────────────────────────────
+        sel = st.session_state.sel_sid
+        if sel and sel in db.song_names:
+            sname  = db.song_names[sel]
+            shc    = song_hash_counts.get(sel, 0)
+
+            with detail_ph:
                 st.markdown(f"""
-                <div class="match-banner">
-                    <div class="match-eyebrow">
-                        <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#00ff88;animation:blink 1s infinite;"></span>
-                        Match Found
-                    </div>
-                    <div class="match-song-name">{best['song_name']}</div>
-                    <div style="margin-top:12px;">
-                        <span class="match-score-badge">{top_score:,} aligned hashes</span>
-                    </div>
-                    <div style="margin-top:10px;font-size:0.78rem;color:#4d5765;font-family:'Space Mono',monospace;">
-                        {len(R['hashes']):,} query hashes generated &nbsp;·&nbsp; {len(freqs):,} spectral peaks extracted
-                    </div>
+                <div class="track-detail">
+                  <div class="td-title">{sname}</div>
+                  <div class="td-meta">Song ID #{sel} &nbsp;·&nbsp; Full Duration Indexed &nbsp;·&nbsp; 11,025 Hz</div>
+                  <div class="td-stats">
+                    <div class="td-stat"><div class="td-stat-val">{shc:,}</div><div class="td-stat-key">Hashes</div></div>
+                    <div class="td-stat"><div class="td-stat-val">#{sel}</div><div class="td-stat-key">Song ID</div></div>
+                    <div class="td-stat"><div class="td-stat-val">Full</div><div class="td-stat-key">Duration</div></div>
+                    <div class="td-stat"><div class="td-stat-val">11k</div><div class="td-stat-key">SR</div></div>
+                  </div>
                 </div>
                 """, unsafe_allow_html=True)
 
-                # ── Step 1: Waveform + Spectrogram ───────────────────────────
-                st.markdown("""
-                <div class="step-header">
-                    <div class="step-num">01</div>
-                    <div class="step-title">Waveform & Spectrogram</div>
-                    <div class="step-sub">Time-domain → Frequency-domain</div>
-                </div>""", unsafe_allow_html=True)
+                mp3 = os.path.join("EE200_course_project_data_2026","Q3_database",f"{sname}.mp3")
+                if os.path.exists(mp3):
+                    st.audio(mp3)
 
-                col1, col2 = st.columns(2)
-                with col1:
-                    fig, ax = plt.subplots(figsize=(8, 3))
-                    t_axis = np.linspace(0, len(y)/recognizer.sr, len(y))
-                    ax.plot(t_axis, y, color='#00aaff', linewidth=0.4, alpha=0.9)
-                    ax.fill_between(t_axis, y, alpha=0.12, color='#00aaff')
-                    ax.set_title("Raw Waveform", fontsize=10, pad=8, color='#c9d1d9')
-                    ax.set_xlabel("Time (s)"); ax.set_ylabel("Amplitude")
-                    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-                    fig.tight_layout(); st.pyplot(fig, use_container_width=True); plt.close(fig)
+# ══════════════════════════════════════════════════════════════════════
+# TAB 2 — IDENTIFY
+# ══════════════════════════════════════════════════════════════════════
+with tab_id:
+    st.markdown('<div class="sec-label">Upload a clip · 5–30 seconds works best</div>', unsafe_allow_html=True)
 
-                with col2:
-                    fig, ax = plt.subplots(figsize=(8, 3))
-                    img = ax.imshow(spectrogram, aspect='auto', origin='lower', cmap='inferno',
-                                    vmin=spectrogram.max()-80, vmax=spectrogram.max())
-                    fig.colorbar(img, ax=ax, format='%+.0f dB', shrink=0.8)
-                    ax.set_title("Log-Magnitude Spectrogram", fontsize=10, pad=8, color='#c9d1d9')
-                    ax.set_xlabel("Time Frames"); ax.set_ylabel("Frequency Bins")
-                    fig.tight_layout(); st.pyplot(fig, use_container_width=True); plt.close(fig)
+    up = st.file_uploader("", type=["mp3","wav"], label_visibility="collapsed")
 
-                # ── Step 2: Constellation Map ─────────────────────────────────
-                st.markdown("""
-                <div class="step-header">
-                    <div class="step-num">02</div>
-                    <div class="step-title">Constellation Map</div>
-                    <div class="step-sub">Local spectral peaks — the "stars"</div>
-                </div>""", unsafe_allow_html=True)
+    # ── Sample clip generator ─────────────────────────────────────────
+    with st.expander("🎲  Try a sample clip from the database"):
+        sample_songs = sorted(db.song_names.items(), key=lambda x: x[1])
+        sample_choice = st.selectbox("Pick a song", [n for _,n in sample_songs], label_visibility="collapsed")
+        col_s1, col_s2 = st.columns([1,2])
+        with col_s1:
+            start_sec = st.slider("Start (seconds)", 0, 120, 30, label_visibility="collapsed")
+        with col_s2:
+            dur_sec = st.slider("Duration (seconds)", 3, 20, 8, label_visibility="collapsed")
 
-                fig, ax = plt.subplots(figsize=(14, 4))
-                ax.imshow(spectrogram, aspect='auto', origin='lower', cmap='inferno',
-                          alpha=0.5, vmin=spectrogram.max()-80, vmax=spectrogram.max())
-                ax.scatter(times, freqs, c='#00ff88', s=3, alpha=0.9, linewidths=0)
-                ax.set_title(f"Constellation Map — {len(freqs):,} strongest spectral peaks extracted",
-                             fontsize=10, pad=8, color='#c9d1d9')
-                ax.set_xlabel("Time Frames"); ax.set_ylabel("Frequency Bins")
-                ax.set_xlim(0, spectrogram.shape[1]); ax.set_ylim(0, spectrogram.shape[0])
-                fig.tight_layout(); st.pyplot(fig, use_container_width=True); plt.close(fig)
+        if st.button("Generate sample clip", key="gen_sample"):
+            mp3_p = os.path.join("EE200_course_project_data_2026","Q3_database",f"{sample_choice}.mp3")
+            if os.path.exists(mp3_p):
+                import librosa, soundfile as sf
+                try:
+                    y_s, sr_s = librosa.load(mp3_p, sr=None, offset=float(start_sec), duration=float(dur_sec))
+                    buf = io.BytesIO()
+                    sf.write(buf, y_s, sr_s, format="WAV")
+                    buf.seek(0)
+                    st.audio(buf, format="audio/wav")
+                    st.download_button("⬇  Download this sample", data=buf.getvalue(),
+                                       file_name=f"{sample_choice}_{start_sec}s.wav", mime="audio/wav")
+                    st.info(f"Upload this clip above to test identification!")
+                except Exception as e:
+                    st.warning(f"Could not generate clip: {e}")
 
-                # ── Step 3: Offset Histogram ──────────────────────────────────
-                st.markdown("""
-                <div class="step-header">
-                    <div class="step-num">03</div>
-                    <div class="step-title">Time-Offset Alignment Histogram</div>
-                    <div class="step-sub">The mathematical proof of identity</div>
-                </div>""", unsafe_allow_html=True)
-                st.markdown(
-                    "Every matched hash casts a vote for a time offset Δt. "
-                    "A genuine match makes thousands of hashes agree on the **same single offset**. "
-                    "That convergence spike is statistically impossible by chance."
-                )
+    if "id_result" not in st.session_state:
+        st.session_state.id_result = None
 
-                histogram_data = best['histogram']
-                offsets = list(histogram_data.keys())
-                counts  = list(histogram_data.values())
-                max_off = max(histogram_data, key=histogram_data.get)
-                max_cnt = histogram_data[max_off]
+    if up:
+        st.audio(up)
+        if st.button("⚡  Identify", key="id_btn"):
+            with st.spinner("Fingerprinting…"):
+                t0_total = time.time()
+                tmp = None
+                try:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tf:
+                        tf.write(up.getvalue()); tmp = tf.name
 
-                fig, ax = plt.subplots(figsize=(14, 4))
-                ax.vlines(offsets, 0, counts, color='#1a2233', linewidth=1.5, alpha=0.8)
-                ax.vlines(max_off, 0, max_cnt, color='#00ff88', linewidth=5)
-                ax.fill_between([max_off-30, max_off+30], 0, max_cnt, color='#00ff88', alpha=0.1)
-                xrange = max(offsets)-min(offsets) if len(offsets)>1 else 1
-                txt_x  = max_off - xrange*0.15 if max_off > (min(offsets)+xrange*0.5) else max_off+xrange*0.05
-                ax.annotate(f"{max_cnt:,} hashes\nalign here",
-                            xy=(max_off, max_cnt), xytext=(txt_x, max_cnt*0.72),
-                            color='#00ff88', fontsize=9,
-                            arrowprops=dict(arrowstyle='->', color='#00ff88', lw=1.5),
-                            bbox=dict(boxstyle='round,pad=0.3', facecolor='#0a1a0f', edgecolor='#00ff88', alpha=0.9))
-                ax.set_ylim(0, max_cnt*1.28)
-                ax.set_xlabel("Time Offset (database frame − query frame)")
-                ax.set_ylabel("Number of Matching Hashes")
-                ax.set_title(f"Offset Histogram — '{best['song_name']}'", fontsize=10, pad=8, color='#c9d1d9')
-                ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-                fig.tight_layout(); st.pyplot(fig, use_container_width=True); plt.close(fig)
+                    t0=time.time(); spec,y = recognizer.get_spectrogram(tmp); t_sp=int((time.time()-t0)*1000)
+                    t0=time.time(); fr,ti  = recognizer.extract_peaks(spec, percentile=90); t_cn=int((time.time()-t0)*1000)
+                    t0=time.time(); hs     = recognizer.generate_hashes(fr,ti); t_hs=int((time.time()-t0)*1000)
+                    t0=time.time(); res    = db.match_hashes(hs); t_db=int((time.time()-t0)*1000)
+                    t_tot = int((time.time()-t0_total)*1000)
 
-                # ── Step 4: Top Candidates ────────────────────────────────────
-                st.markdown("""
-                <div class="step-header">
-                    <div class="step-num">04</div>
-                    <div class="step-title">Top Candidates Ranked</div>
-                    <div class="step-sub">All competing songs scored</div>
-                </div>""", unsafe_allow_html=True)
+                    st.session_state.id_result = dict(
+                        spec=spec,y=y,fr=fr,ti=ti,hs=hs,res=res,
+                        t_sp=t_sp,t_cn=t_cn,t_hs=t_hs,t_db=t_db,t_tot=t_tot
+                    )
+                except Exception as ex:
+                    st.error(f"Error: {ex}")
+                finally:
+                    if tmp and os.path.exists(tmp): os.unlink(tmp)
 
-                top5 = results[:5]
-                top5_max = top5[0]['score']
-                rows_html = ""
-                for rank, r in enumerate(top5, 1):
-                    pct  = int(r['score']/top5_max*100) if top5_max>0 else 0
-                    gold = rank == 1
-                    bar_color = "linear-gradient(90deg,#00ff88,#00aaff)" if gold else "#1a2a3a"
-                    name_col  = "color:#00ff88;" if gold else ""
-                    rows_html += f"""
-                    <div class="cand-row">
-                        <div class="cand-rank">{'🥇' if gold else f'#{rank}'}</div>
-                        <div class="cand-name" style="{name_col}">{r['song_name']}</div>
-                        <div class="cand-bar-wrap"><div class="cand-bar" style="width:{pct}%;background:{bar_color};"></div></div>
-                        <div class="cand-score">{r['score']:,}</div>
-                    </div>"""
-                st.markdown(f'<div class="cand-table-wrap">{rows_html}</div>', unsafe_allow_html=True)
+    if st.session_state.id_result:
+        R = st.session_state.id_result
+        spec=R['spec']; y=R['y']; fr=R['fr']; ti=R['ti']; res=R['res']
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 3 · BATCH TEST
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_batch:
-    st.markdown('<div class="section-label">Bulk identification &amp; accuracy benchmarking</div>', unsafe_allow_html=True)
-    st.markdown(
-        "Upload multiple query clips. Each is fingerprinted and matched silently in the background. "
-        "Results are colour-coded and exported as `results.csv`."
-    )
-
-    uploaded_files = st.file_uploader(
-        "Drop multiple audio clips here",
-        type=["mp3", "wav"],
-        accept_multiple_files=True,
-        label_visibility="collapsed"
-    )
-
-    if uploaded_files:
+        # Timing strip
         st.markdown(f"""
-        <div style="padding:10px 16px;background:rgba(0,170,255,0.06);border:1px solid rgba(0,170,255,0.15);
-                    border-radius:10px;font-size:0.82rem;color:#00aaff;margin-bottom:14px;
-                    font-family:'Space Mono',monospace;">
-            {len(uploaded_files)} clip(s) queued for identification
+        <div class="timing-strip">
+          <div class="t-cell"><div class="t-val">{R['t_sp']}ms</div><div class="t-lbl">Spectrogram</div></div>
+          <div class="t-cell"><div class="t-val">{R['t_cn']}ms</div><div class="t-lbl">Peaks</div></div>
+          <div class="t-cell"><div class="t-val">{R['t_hs']}ms</div><div class="t-lbl">Hashing</div></div>
+          <div class="t-cell"><div class="t-val">{R['t_db']}ms</div><div class="t-lbl">Lookup</div></div>
+          <div class="t-cell"><div class="t-val">{R['t_tot']}ms</div><div class="t-lbl">Total</div></div>
         </div>""", unsafe_allow_html=True)
+
+        if not res or res[0]['score'] < 15:
+            st.markdown("""
+            <div class="result-card nomatch">
+              <div class="result-eyebrow fail">◈ No match found</div>
+              <div style="color:#52525b;font-size:0.85rem;margin-top:6px;">This clip is not in the database.</div>
+            </div>""", unsafe_allow_html=True)
+        else:
+            best = res[0]
+            st.markdown(f"""
+            <div class="result-card matched">
+              <div class="result-eyebrow ok"><span style="width:7px;height:7px;border-radius:50%;background:#818cf8;display:inline-block;animation:pulse-anim 1.5s infinite;"></span>Match Found</div>
+              <div class="result-song">{best['song_name']}</div>
+              <div><span class="result-badge">{best['score']:,} aligned hashes</span></div>
+              <div style="margin-top:12px;font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#27272a;">
+                {len(R['hs']):,} query hashes · {len(fr):,} spectral peaks
+              </div>
+            </div>""", unsafe_allow_html=True)
+
+            # Step 1 — Waveform & Spectrogram
+            st.markdown('<div class="step-hdr"><div class="step-n">01</div><div class="step-t">Waveform & Spectrogram</div><div class="step-s">time → frequency</div></div>', unsafe_allow_html=True)
+            c1,c2 = st.columns(2)
+            with c1:
+                fig,ax=plt.subplots(figsize=(8,3))
+                tax=np.linspace(0,len(y)/recognizer.sr,len(y))
+                ax.plot(tax,y,color='#6366f1',linewidth=0.5,alpha=0.9)
+                ax.fill_between(tax,y,alpha=0.1,color='#818cf8')
+                ax.set_title("Waveform",fontsize=9,color='#71717a',pad=6)
+                ax.set_xlabel("Time (s)"); ax.set_ylabel("Amplitude")
+                ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+                fig.tight_layout(); st.pyplot(fig,use_container_width=True); plt.close(fig)
+            with c2:
+                fig,ax=plt.subplots(figsize=(8,3))
+                im=ax.imshow(spec,aspect='auto',origin='lower',cmap='magma',vmin=spec.max()-80,vmax=spec.max())
+                fig.colorbar(im,ax=ax,format='%+.0fdB',shrink=0.75)
+                ax.set_title("Log-Magnitude Spectrogram",fontsize=9,color='#71717a',pad=6)
+                ax.set_xlabel("Time Frames"); ax.set_ylabel("Freq Bins")
+                fig.tight_layout(); st.pyplot(fig,use_container_width=True); plt.close(fig)
+
+            # Step 2 — Constellation Map
+            st.markdown('<div class="step-hdr"><div class="step-n">02</div><div class="step-t">Constellation Map</div><div class="step-s">spectral peaks</div></div>', unsafe_allow_html=True)
+            fig,ax=plt.subplots(figsize=(14,3.5))
+            ax.imshow(spec,aspect='auto',origin='lower',cmap='magma',alpha=0.45,vmin=spec.max()-80,vmax=spec.max())
+            ax.scatter(ti,fr,c='#a78bfa',s=2.5,alpha=0.9,linewidths=0)
+            ax.set_title(f"{len(fr):,} spectral peaks extracted",fontsize=9,color='#71717a',pad=6)
+            ax.set_xlabel("Time Frames"); ax.set_ylabel("Freq Bins")
+            ax.set_xlim(0,spec.shape[1]); ax.set_ylim(0,spec.shape[0])
+            fig.tight_layout(); st.pyplot(fig,use_container_width=True); plt.close(fig)
+
+            # Step 3 — Offset Histogram
+            st.markdown('<div class="step-hdr"><div class="step-n">03</div><div class="step-t">Alignment Histogram</div><div class="step-s">proof of identity</div></div>', unsafe_allow_html=True)
+            hist = best['histogram']
+            offs = list(hist.keys()); cnts = list(hist.values())
+            moff = max(hist, key=hist.get); mcnt = hist[moff]
+            fig,ax=plt.subplots(figsize=(14,3.5))
+            ax.vlines(offs,0,cnts,color='#27272a',linewidth=1.2)
+            ax.vlines(moff,0,mcnt,color='#818cf8',linewidth=5)
+            ax.fill_between([moff-30,moff+30],0,mcnt,color='#818cf8',alpha=0.08)
+            xr = max(offs)-min(offs) if len(offs)>1 else 1
+            tx = moff-xr*0.15 if moff>(min(offs)+xr*0.5) else moff+xr*0.04
+            ax.annotate(f"{mcnt:,} hashes",xy=(moff,mcnt),xytext=(tx,mcnt*0.72),
+                color='#818cf8',fontsize=9,
+                arrowprops=dict(arrowstyle='->',color='#818cf8',lw=1.5),
+                bbox=dict(boxstyle='round,pad=0.3',fc='#111113',ec='#818cf8',alpha=0.95))
+            ax.set_ylim(0,mcnt*1.3)
+            ax.set_xlabel("Time Offset (db_t − query_t)"); ax.set_ylabel("Hash votes")
+            ax.set_title(f"Offset histogram — {best['song_name']}",fontsize=9,color='#71717a',pad=6)
+            ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+            fig.tight_layout(); st.pyplot(fig,use_container_width=True); plt.close(fig)
+
+            # Step 4 — Candidates
+            st.markdown('<div class="step-hdr"><div class="step-n">04</div><div class="step-t">Top Candidates</div><div class="step-s">ranked by score</div></div>', unsafe_allow_html=True)
+            top5 = res[:5]; mx5 = top5[0]['score']
+            rows=""
+            for i,r in enumerate(top5,1):
+                pct = int(r['score']/mx5*100) if mx5>0 else 0
+                gold = i==1
+                nc = "color:#818cf8;" if gold else ""
+                bc = "#6366f1" if gold else "#27272a"
+                rows += f"""<div class="cand-row">
+                  <div class="cand-rank">{'★' if gold else f'#{i}'}</div>
+                  <div class="cand-name" style="{nc}">{r['song_name']}</div>
+                  <div class="cand-bar-wrap"><div class="cand-bar" style="width:{pct}%;background:{bc};"></div></div>
+                  <div class="cand-score">{r['score']:,}</div>
+                </div>"""
+            st.markdown(f'<div class="cand-wrap">{rows}</div>', unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════════════════════
+# TAB 3 — BATCH TEST
+# ══════════════════════════════════════════════════════════════════════
+with tab_batch:
+    st.markdown('<div class="sec-label">Bulk identification & accuracy benchmarking</div>', unsafe_allow_html=True)
+
+    # Sample data section
+    with st.expander("🎲  Generate sample test clips (no upload needed)"):
+        st.markdown("Pick songs and clip settings to auto-generate a test set.", unsafe_allow_html=False)
+        ncols_sample = st.columns(3)
+        with ncols_sample[0]:
+            n_samples = st.slider("Number of clips", 1, 10, 5)
+        with ncols_sample[1]:
+            sample_dur = st.slider("Clip duration (s)", 3, 15, 8)
+        with ncols_sample[2]:
+            sample_start = st.slider("Start offset (s)", 5, 60, 20)
+
+        if st.button("Generate & Download test clips", key="gen_batch_samples"):
+            import librosa, soundfile as sf, zipfile
+            zip_buf = io.BytesIO()
+            song_list = list(db.song_names.items())[:n_samples]
+            with zipfile.ZipFile(zip_buf, 'w') as zf:
+                for sid, name in song_list:
+                    mp3p = os.path.join("EE200_course_project_data_2026","Q3_database",f"{name}.mp3")
+                    if os.path.exists(mp3p):
+                        try:
+                            y_tmp, sr_tmp = librosa.load(mp3p, sr=None, offset=float(sample_start), duration=float(sample_dur))
+                            wb = io.BytesIO()
+                            sf.write(wb, y_tmp, sr_tmp, format="WAV")
+                            zf.writestr(f"{name}.wav", wb.getvalue())
+                        except: pass
+            zip_buf.seek(0)
+            st.download_button("⬇  Download sample_clips.zip", data=zip_buf.getvalue(),
+                               file_name="sample_clips.zip", mime="application/zip")
+            st.info("Extract the ZIP and upload all WAV files below to test batch identification!")
+
+    ups = st.file_uploader("", type=["mp3","wav"], accept_multiple_files=True, label_visibility="collapsed")
+
+    if ups:
+        st.markdown(f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:0.72rem;color:#52525b;margin-bottom:12px;">{len(ups)} clips queued</div>', unsafe_allow_html=True)
 
         if "batch_df" not in st.session_state:
             st.session_state.batch_df = None
 
-        if st.button("⚡  Run Batch Identification", key="batch_btn"):
-            progress = st.progress(0)
-            status   = st.empty()
-            results_data = []
-
-            for i, f in enumerate(uploaded_files):
-                base      = os.path.splitext(f.name)[0]
-                full_name = f.name
-                status.markdown(f"🔍 Identifying `{f.name}`… ({i+1}/{len(uploaded_files)})")
-                prediction = "ERROR"
-                tmp_path   = None
+        if st.button("⚡  Run Batch", key="batch_btn"):
+            prog = st.progress(0)
+            stat = st.empty()
+            rows = []
+            for i,f in enumerate(ups):
+                stat.markdown(f"Identifying **{f.name}**… ({i+1}/{len(ups)})")
+                pred="ERROR"; tmp=None
                 try:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmp:
-                        tmp.write(f.getvalue())
-                        tmp_path = tmp.name
-                    spec, _ = recognizer.get_spectrogram(tmp_path)
-                    fr, ti  = recognizer.extract_peaks(spec, percentile=90)
-                    hs      = recognizer.generate_hashes(fr, ti)
-                    ms      = db.match_hashes(hs)
-                    prediction = ms[0]['song_name'] if (ms and ms[0]['score'] >= 15) else "NO MATCH"
-                except Exception:
-                    prediction = "ERROR"
+                    with tempfile.NamedTemporaryFile(delete=False,suffix=".mp3") as tf:
+                        tf.write(f.getvalue()); tmp=tf.name
+                    sp,_=recognizer.get_spectrogram(tmp)
+                    fr2,ti2=recognizer.extract_peaks(sp,percentile=90)
+                    hs2=recognizer.generate_hashes(fr2,ti2)
+                    ms=db.match_hashes(hs2)
+                    pred=ms[0]['song_name'] if (ms and ms[0]['score']>=15) else "NO MATCH"
+                except: pred="ERROR"
                 finally:
-                    if tmp_path and os.path.exists(tmp_path):
-                        os.unlink(tmp_path)
-
-                def normalise(s): return re.sub(r'[^a-z0-9]', '', s.lower())
-                is_correct = normalise(base) == normalise(prediction)
-                results_data.append({"filename": full_name, "prediction": prediction, "correct": is_correct})
-                progress.progress((i+1)/len(uploaded_files))
-
-            status.markdown("**✅ Batch complete!**")
-            st.session_state.batch_df = pd.DataFrame(results_data)
+                    if tmp and os.path.exists(tmp): os.unlink(tmp)
+                base=os.path.splitext(f.name)[0]
+                def nm(s): return re.sub(r'[^a-z0-9]','',s.lower())
+                rows.append({"filename":f.name,"prediction":pred,"correct":nm(base)==nm(pred)})
+                prog.progress((i+1)/len(ups))
+            stat.markdown("**Done!**")
+            st.session_state.batch_df = pd.DataFrame(rows)
 
         if st.session_state.batch_df is not None:
             df = st.session_state.batch_df
-            correct_count = df['correct'].sum()
-            accuracy = int(correct_count / len(df) * 100)
+            correct = int(df['correct'].sum())
+            acc = int(correct/len(df)*100)
+            acc_col = "#818cf8" if acc==100 else ("#f59e0b" if acc>=70 else "#f87171")
 
-            acc_color = "#00ff88" if accuracy == 100 else ("#f0883e" if accuracy >= 70 else "#f85149")
+            bc1,bc2,bc3 = st.columns(3)
+            for col,val,lbl in [(bc1,str(len(df)),"Clips"),(bc2,str(correct),"Correct"),(bc3,f"{acc}%","Accuracy")]:
+                with col:
+                    col_style = f"color:{acc_col};" if lbl=="Accuracy" else ""
+                    st.markdown(f'<div class="stat-box"><div class="stat-box-val" style="{col_style}">{val}</div><div class="stat-box-key">{lbl}</div></div>', unsafe_allow_html=True)
 
-            st.markdown(f"""
-            <div style="display:flex;gap:12px;margin:18px 0;flex-wrap:wrap;">
-                <div class="sys-card" style="flex:1;min-width:120px;text-align:center;">
-                    <div class="sys-card-val">{len(df)}</div>
-                    <div class="sys-card-label">Clips Processed</div>
-                </div>
-                <div class="sys-card" style="flex:1;min-width:120px;text-align:center;">
-                    <div class="sys-card-val">{int(correct_count)}</div>
-                    <div class="sys-card-label">Correct Matches</div>
-                </div>
-                <div class="sys-card" style="flex:1;min-width:120px;text-align:center;">
-                    <div class="sys-card-val" style="background:none;-webkit-text-fill-color:{acc_color};color:{acc_color};">{accuracy}%</div>
-                    <div class="sys-card-label">Accuracy</div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-
-            st.markdown('<div class="section-label">Results</div>', unsafe_allow_html=True)
-            rows_html = ""
-            for _, row in df.iterrows():
-                badge = (
-                    '<span class="correct-badge match">✓ MATCH</span>' if row['correct']
-                    else '<span class="correct-badge wrong">✗ WRONG</span>'
-                )
-                rows_html += f"""
-                <div class="batch-row">
-                    <div style="flex:1;font-size:0.82rem;font-weight:600;color:#e6edf3;font-family:'Space Mono',monospace;">{row['filename']}</div>
-                    <div style="flex:1;font-size:0.82rem;color:#6e7681;">{row['prediction']}</div>
-                    {badge}
+            st.markdown('<br><div class="sec-label">Results</div>', unsafe_allow_html=True)
+            rows_html=""
+            for _,row in df.iterrows():
+                badge=f'<span class="badge-ok">✓ MATCH</span>' if row['correct'] else f'<span class="badge-fail">✗ WRONG</span>'
+                rows_html+=f"""<div class="batch-row">
+                  <div style="flex:1;font-size:0.8rem;font-weight:600;color:#d4d4d8;font-family:'JetBrains Mono',monospace;">{row['filename']}</div>
+                  <div style="flex:1;font-size:0.8rem;color:#52525b;">{row['prediction']}</div>
+                  {badge}
                 </div>"""
-            st.markdown(f'<div class="cand-table-wrap">{rows_html}</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="batch-table-wrap">{rows_html}</div>', unsafe_allow_html=True)
 
-            csv_out = df[['filename', 'prediction']].to_csv(index=False)
-            st.download_button("⬇  Download results.csv", data=csv_out, file_name="results.csv", mime="text/csv")
+            csv = df[['filename','prediction']].to_csv(index=False)
+            st.download_button("⬇  results.csv", data=csv, file_name="results.csv", mime="text/csv")
 
-# ══════════════════════════════════════════════════════════════════════════════
-# TAB 4 · HOW IT WORKS
-# ══════════════════════════════════════════════════════════════════════════════
-with tab_about:
-    st.markdown('<div class="section-label">Technical deep-dive into the fingerprinting algorithm</div>', unsafe_allow_html=True)
+# ══════════════════════════════════════════════════════════════════════
+# TAB 4 — HOW IT WORKS
+# ══════════════════════════════════════════════════════════════════════
+with tab_how:
+    st.markdown('<div class="sec-label">Technical deep-dive</div>', unsafe_allow_html=True)
 
-    # Feature cards
-    fc = st.columns(3)
-    features = [
-        ("🌊", "STFT Spectrogram", "Transform audio into a log-magnitude frequency-time heatmap using Short-Time Fourier Transform with n_fft=2048 and hop_length=512, giving a 46ms time resolution."),
-        ("⭐", "Constellation Map", "Extract local spectral maxima (peaks) using a 15×15 neighborhood filter. This sparse set of 'stars' captures the harmonic skeleton using <1% of spectrogram cells."),
-        ("🔗", "Hash Pairs", "Pair each anchor peak with up to 20 nearby target peaks. Each pair generates a hash (f₁, f₂, Δt) — a highly specific, noise-robust fingerprint of the song's structure."),
-        ("🗃️", "Hash Database", "Store millions of (hash → song_id, time_offset) entries in a Python dict for O(1) lookup. Our database holds {:,} unique hash keys.".format(total_hashes)),
-        ("📐", "Offset Histogram", "For a query clip, generate hashes and lookup each in the DB. Count votes for each (song, offset) pair. A genuine match produces a statistically impossible spike."),
-        ("🛡️", "Robustness", "The system is robust to MP3 compression, background noise, and partial clips because the hash structure (relative freq, relative time) is preserved under these distortions."),
+    hw_items = [
+        ("🌀","STFT Spectrogram","Convert audio samples into a 2D log-magnitude heatmap using Short-Time Fourier Transform. Window size n_fft=2048 gives 46ms time resolution at 11kHz."),
+        ("⭐","Constellation Map","Apply a 15×15 local maximum filter to extract the strongest spectral peaks. These sparse 'stars' capture harmonic structure using less than 1% of spectrogram cells."),
+        ("🔗","Hash Pairing","Each anchor peak is paired with up to 20 nearby target peaks within a time-frequency fan zone. Each pair yields a hash key (f₁, f₂, Δt) — highly specific and noise-robust."),
+        ("🗄️","Hash Database","Store millions of (hash → song_id, offset) entries in a Python dict for O(1) retrieval. This DB holds {:,} unique keys across {} songs.".format(total_hashes,total_songs)),
+        ("📐","Offset Histogram","For each query hash that matches the DB, record a vote for (song_id, db_offset − query_offset). A genuine match produces a statistically impossible spike at one offset."),
+        ("🛡️","Robustness","The hash structure encodes relative frequencies and relative time. MP3 compression, background noise, and cropping preserve these relative relationships — making the system robust."),
     ]
-    for i, (icon, title, desc) in enumerate(features):
-        with fc[i % 3]:
-            st.markdown(f"""
-            <div class="feature-card">
-                <div class="feature-icon">{icon}</div>
-                <div class="feature-title">{title}</div>
-                <div class="feature-desc">{desc}</div>
-            </div><br>""", unsafe_allow_html=True)
+    cols3 = st.columns(3)
+    for i,(icon,title,desc) in enumerate(hw_items):
+        with cols3[i%3]:
+            st.markdown(f"""<div class="hw-card">
+              <div class="hw-icon">{icon}</div>
+              <div class="hw-title">{title}</div>
+              <div class="hw-desc">{desc}</div>
+            </div>""", unsafe_allow_html=True)
 
-    st.markdown('<hr style="border-color:rgba(255,255,255,0.05);margin:8px 0 24px;">', unsafe_allow_html=True)
+    st.markdown('<br><div class="sec-label">The Hash Function</div>', unsafe_allow_html=True)
+    col_hf, col_why = st.columns(2)
+    with col_hf:
+        st.markdown("""
+        <div style="background:#111113;border:1px solid #1c1c1f;border-radius:10px;padding:20px;
+                    font-family:'JetBrains Mono',monospace;font-size:0.75rem;line-height:2.1;color:#52525b;">
+          <span style="color:#3f3f46;"># anchor peak at (f₁, t₁)</span><br>
+          <span style="color:#3f3f46;"># target peak at (f₂, t₂) in fan zone</span><br><br>
+          <span style="color:#818cf8;">key</span> <span style="color:#e4e4e7;">=</span>
+          <span style="color:#a78bfa;">(f₁, f₂, t₂−t₁)</span><br>
+          <span style="color:#818cf8;">val</span> <span style="color:#e4e4e7;">=</span>
+          <span style="color:#38bdf8;">(song_id, t₁)</span><br><br>
+          <span style="color:#3f3f46;"># during matching:</span><br>
+          <span style="color:#818cf8;">offset</span> <span style="color:#e4e4e7;">=</span>
+          <span style="color:#38bdf8;">db_t₁</span> <span style="color:#e4e4e7;">−</span>
+          <span style="color:#a78bfa;">query_t₁</span>
+        </div>""", unsafe_allow_html=True)
 
-    # Algorithm complexity table
-    st.markdown('<div class="section-label">Algorithm Complexity Analysis</div>', unsafe_allow_html=True)
+    with col_why:
+        st.markdown("""
+        <div style="background:#111113;border:1px solid #1c1c1f;border-radius:10px;padding:20px;
+                    font-size:0.78rem;line-height:1.85;color:#52525b;">
+          A single frequency like <span style="color:#818cf8;">440 Hz</span> appears in thousands of songs.<br><br>
+          But the triplet <span style="color:#a78bfa;">(440 Hz, 880 Hz, Δt=3.2s)</span> is nearly unique to one recording.<br><br>
+          When <span style="color:#e4e4e7;">thousands of such triplets</span> all agree on a single time offset,
+          the probability of a false positive approaches <span style="color:#f87171;">zero</span> —
+          providing cryptographic-grade audio identification.
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown('<br><div class="sec-label">Complexity</div>', unsafe_allow_html=True)
     st.markdown("""
-    <div class="cand-table-wrap">
-        <div class="cand-row" style="background:rgba(0,255,136,0.04);">
-            <div style="flex:1;font-size:0.72rem;font-family:'Space Mono',monospace;color:#4d5765;">OPERATION</div>
-            <div style="flex:1;font-size:0.72rem;font-family:'Space Mono',monospace;color:#4d5765;">TIME COMPLEXITY</div>
-            <div style="flex:1;font-size:0.72rem;font-family:'Space Mono',monospace;color:#4d5765;">SPACE COMPLEXITY</div>
-            <div style="flex:1;font-size:0.72rem;font-family:'Space Mono',monospace;color:#4d5765;">NOTES</div>
-        </div>
-        <div class="cand-row">
-            <div style="flex:1;font-size:0.8rem;color:#e6edf3;">STFT Spectrogram</div>
-            <div style="flex:1;font-size:0.8rem;color:#00aaff;font-family:'Space Mono',monospace;">O(N log N)</div>
-            <div style="flex:1;font-size:0.8rem;color:#6e7681;font-family:'Space Mono',monospace;">O(N·F)</div>
-            <div style="flex:1;font-size:0.78rem;color:#4d5765;">N=signal length, F=freq bins</div>
-        </div>
-        <div class="cand-row">
-            <div style="flex:1;font-size:0.8rem;color:#e6edf3;">Peak Extraction</div>
-            <div style="flex:1;font-size:0.8rem;color:#00aaff;font-family:'Space Mono',monospace;">O(N·F·w²)</div>
-            <div style="flex:1;font-size:0.8rem;color:#6e7681;font-family:'Space Mono',monospace;">O(P)</div>
-            <div style="flex:1;font-size:0.78rem;color:#4d5765;">w=neighborhood size (15)</div>
-        </div>
-        <div class="cand-row">
-            <div style="flex:1;font-size:0.8rem;color:#e6edf3;">Hash Generation</div>
-            <div style="flex:1;font-size:0.8rem;color:#00aaff;font-family:'Space Mono',monospace;">O(P·fan)</div>
-            <div style="flex:1;font-size:0.8rem;color:#6e7681;font-family:'Space Mono',monospace;">O(H)</div>
-            <div style="flex:1;font-size:0.78rem;color:#4d5765;">P=peaks, fan=fan_out (20)</div>
-        </div>
-        <div class="cand-row">
-            <div style="flex:1;font-size:0.8rem;color:#e6edf3;">DB Lookup</div>
-            <div style="flex:1;font-size:0.8rem;color:#00ff88;font-family:'Space Mono',monospace;">O(H)</div>
-            <div style="flex:1;font-size:0.8rem;color:#6e7681;font-family:'Space Mono',monospace;">O(S·H)</div>
-            <div style="flex:1;font-size:0.78rem;color:#4d5765;">O(1) per hash — dict lookup</div>
-        </div>
+    <div class="cand-wrap">
+      <div class="cand-row" style="background:#111113;">
+        <div class="cand-rank" style="color:#3f3f46;font-size:0.6rem;">OP</div>
+        <div class="cand-name" style="color:#3f3f46;font-family:'JetBrains Mono',monospace;font-size:0.6rem;text-transform:uppercase;">Operation</div>
+        <div style="flex:0.6;font-family:'JetBrains Mono',monospace;font-size:0.6rem;color:#3f3f46;text-transform:uppercase;">Time</div>
+        <div class="cand-score" style="background:transparent;border:none;color:#3f3f46;font-size:0.6rem;text-transform:uppercase;">Space</div>
+      </div>
+      <div class="cand-row"><div class="cand-rank">①</div><div class="cand-name">STFT Spectrogram</div><div style="flex:0.6;font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:#818cf8;">O(N log N)</div><div class="cand-score">O(N·F)</div></div>
+      <div class="cand-row"><div class="cand-rank">②</div><div class="cand-name">Peak Extraction</div><div style="flex:0.6;font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:#818cf8;">O(N·F·w²)</div><div class="cand-score">O(P)</div></div>
+      <div class="cand-row"><div class="cand-rank">③</div><div class="cand-name">Hash Generation</div><div style="flex:0.6;font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:#818cf8;">O(P·fan)</div><div class="cand-score">O(H)</div></div>
+      <div class="cand-row"><div class="cand-rank">④</div><div class="cand-name">DB Lookup (per hash)</div><div style="flex:0.6;font-family:'JetBrains Mono',monospace;font-size:0.72rem;color:#a78bfa;font-weight:700;">O(1)</div><div class="cand-score">O(S·H)</div></div>
     </div>
     """, unsafe_allow_html=True)
-
-    st.markdown('<hr style="border-color:rgba(255,255,255,0.05);margin:24px 0;">', unsafe_allow_html=True)
-
-    col_l, col_r = st.columns(2)
-    with col_l:
-        st.markdown('<div class="section-label">The Hash Function</div>', unsafe_allow_html=True)
-        st.markdown("""
-        <div style="background:rgba(0,0,0,0.4);border:1px solid rgba(0,255,136,0.1);
-                    border-radius:12px;padding:20px;font-family:'Space Mono',monospace;font-size:0.78rem;line-height:2;">
-            <span style="color:#4d5765;"># For each anchor peak at (f₁, t₁):</span><br>
-            <span style="color:#4d5765;"># For each target peak at (f₂, t₂) in fan zone:</span><br>
-            <br>
-            <span style="color:#00aaff;">hash_key</span> <span style="color:#e6edf3;">=</span> <span style="color:#00ff88;">(f₁, f₂, t₂ − t₁)</span><br>
-            <span style="color:#00aaff;">hash_val</span> <span style="color:#e6edf3;">=</span> <span style="color:#f0883e;">(song_id, t₁)</span><br>
-            <br>
-            <span style="color:#4d5765;"># During matching:</span><br>
-            <span style="color:#00aaff;">offset</span> <span style="color:#e6edf3;">=</span> <span style="color:#f0883e;">db_t₁</span> <span style="color:#e6edf3;">−</span> <span style="color:#00ff88;">query_t₁</span>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with col_r:
-        st.markdown('<div class="section-label">Why It Works</div>', unsafe_allow_html=True)
-        st.markdown("""
-        <div style="background:rgba(0,0,0,0.4);border:1px solid rgba(0,170,255,0.1);
-                    border-radius:12px;padding:20px;font-size:0.78rem;line-height:1.9;color:#6e7681;">
-            A single frequency <span style="color:#00ff88;">f₁ = 440 Hz</span> appears in thousands of songs.<br><br>
-            But the triplet <span style="color:#00aaff;">(440 Hz, 880 Hz, Δt=3.2s)</span> is nearly unique.<br><br>
-            When <span style="color:#e6edf3;">thousands of such triplets</span> all agree on a single time offset, 
-            the probability of a <span style="color:#f85149;">false positive approaches zero</span> — 
-            providing cryptographic-grade identification.
-        </div>
-        """, unsafe_allow_html=True)
