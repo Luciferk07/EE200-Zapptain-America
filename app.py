@@ -690,6 +690,12 @@ with tab_lib:
                 </div>
             </div>
             """, unsafe_allow_html=True)
+            
+            with detail_placeholder:
+                mp3_path = os.path.join("EE200_course_project_data_2026", "Q3_database", f"{sel_name}.mp3")
+                if os.path.exists(mp3_path):
+                    st.markdown("<div style='margin-top:-10px; margin-bottom: 24px;'><strong style='color:#e6edf3; font-size: 0.85rem;'>Listen to the Original Track:</strong></div>", unsafe_allow_html=True)
+                    st.audio(mp3_path)
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB 2 · IDENTIFY
