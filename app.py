@@ -11,6 +11,7 @@ import time
 import re
 import io
 import base64
+import random
 from audio_recognizer import AudioRecognizer, SongDatabase
 
 # ─────────────────────────────────────────────────────────── PAGE CONFIG
@@ -153,55 +154,51 @@ html, body, [class*="css"] {
 }
 .sec-label::after { content:''; flex:1; height:1px; background:#18181b; }
 
-/* ── LIBRARY TABLE ── */
-.track-table { border: 1px solid #1c1c1f; border-radius: 12px; overflow: hidden; }
-.track-header {
+/* ── LIBRARY GRID ── */
+.song-grid {
     display: grid;
-    grid-template-columns: 36px 1fr 120px 80px;
-    gap: 0; padding: 10px 18px;
-    background: #111113;
-    border-bottom: 1px solid #1c1c1f;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.58rem; color: #3f3f46;
-    text-transform: uppercase; letter-spacing: 1.5px;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 16px;
+    margin-top: 20px;
 }
-.track-row {
-    display: grid;
-    grid-template-columns: 36px 1fr 120px 80px;
-    gap: 0; padding: 12px 18px;
-    border-bottom: 1px solid #0f0f11;
-    align-items: center;
-    transition: background 0.15s;
+.song-card {
+    background: #111113;
+    border: 1px solid #1c1c1f;
+    border-radius: 14px;
+    padding: 12px;
+    transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
     cursor: none !important;
 }
-.track-row:last-child { border-bottom: none; }
-.track-row:hover { background: #111113; }
-.track-row.selected { background: rgba(129,140,248,0.07); border-left: 2px solid #818cf8; }
-.track-num { font-family:'JetBrains Mono',monospace; font-size:0.72rem; color:#3f3f46; }
-.track-name { font-size: 0.85rem; font-weight: 600; color: #e4e4e7; }
-.track-bar-wrap { height: 3px; background: #1c1c1f; border-radius: 3px; overflow: hidden; }
-.track-bar { height: 3px; border-radius: 3px; background: linear-gradient(90deg, #6366f1, #818cf8); }
-.track-hash { font-family:'JetBrains Mono',monospace; font-size:0.68rem; color:#52525b; text-align:right; }
-
-/* EXPANDED TRACK DETAIL */
-.track-detail {
-    margin: 0 0 20px;
-    background: #111113;
-    border: 1px solid #27272a;
-    border-radius: 12px;
-    padding: 22px 26px;
-    animation: fadeIn 0.2s ease;
+.song-card:hover {
+    transform: translateY(-4px);
+    border-color: #3f3f46;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
 }
-@keyframes fadeIn { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
-.td-title { font-family:'Unbounded',sans-serif; font-size:1.4rem; font-weight:800; color:#fafafa; letter-spacing:-0.5px; margin-bottom:6px; }
-.td-meta { font-family:'JetBrains Mono',monospace; font-size:0.62rem; color:#3f3f46; letter-spacing:1px; text-transform:uppercase; margin-bottom:18px; }
-.td-stats { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px; }
-.td-stat {
-    background: #0c0c0e; border: 1px solid #1c1c1f;
-    border-radius: 8px; padding: 10px 16px; text-align: center; flex:1; min-width:80px;
+.song-card img {
+    width: 100%;
+    height: 140px;
+    object-fit: cover;
+    border-radius: 10px;
+    margin-bottom: 14px;
+    background: #0c0c0e;
+    border: 1px solid #1c1c1f;
 }
-.td-stat-val { font-family:'JetBrains Mono',monospace; font-size:1rem; font-weight:700; color:#818cf8; }
-.td-stat-key { font-size:0.6rem; color:#3f3f46; text-transform:uppercase; letter-spacing:1px; margin-top:3px; }
+.song-card-title {
+    font-family: 'Inter', sans-serif;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #e4e4e7;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.song-card-hashes {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: #a1a1aa;
+    font-weight: 600;
+}
 
 /* IDENTIFY TAB */
 .upload-zone {
@@ -308,63 +305,77 @@ html, body, [class*="css"] {
     background:#0c0c0e !important;
 }
 audio { border-radius:8px; width:100%; }
-[data-testid="column"] .stButton button {
-    background:#111113 !important; border:1px solid #1c1c1f !important;
-    border-radius:10px !important; padding:0 !important; width:100% !important;
-    text-align:left !important; transition:all 0.2s !important;
-    margin-bottom:0 !important; color:#e4e4e7 !important;
-    font-weight:600 !important; font-size:0.82rem !important;
-    cursor:none !important;
-}
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────────────────── CURSOR (components)
+# ─────────────────────────────────────────────────────────── CURSOR
+# We inject into window.parent.document to ensure the cursor works globally across the Streamlit app.
 components.html("""
-<style>
-#ss-ring {
-    position:fixed; top:0; left:0; pointer-events:none; z-index:2147483647;
-    width:24px; height:24px; border-radius:50%;
-    border: 1.5px solid rgba(129,140,248,0.8);
-    transform:translate(-50%,-50%);
-    transition: width 0.25s, height 0.25s, border-color 0.25s, background 0.25s;
-}
-#ss-dot {
-    position:fixed; top:0; left:0; pointer-events:none; z-index:2147483647;
-    width:4px; height:4px; border-radius:50%;
-    background:#818cf8; transform:translate(-50%,-50%);
-}
-</style>
-<div id="ss-ring"></div>
-<div id="ss-dot"></div>
 <script>
-var ring=document.getElementById('ss-ring'), dot=document.getElementById('ss-dot');
-var mx=0, my=0, rx=0, ry=0, running=false;
-function step(){
-    rx += (mx-rx)*0.10;
-    ry += (my-ry)*0.10;
-    ring.style.left=rx+'px'; ring.style.top=ry+'px';
-    requestAnimationFrame(step);
+const parent = window.parent.document;
+if (!parent.getElementById('cursor-style-injected')) {
+    const style = parent.createElement('style');
+    style.id = 'cursor-style-injected';
+    style.innerHTML = `
+        body, html, [class*="css"], iframe { cursor: none !important; }
+        #cursor-dot {
+            position: fixed; top: 0; left: 0; width: 4px; height: 4px;
+            background: #818cf8; border-radius: 50%; pointer-events: none;
+            z-index: 9999999; transform: translate(-50%, -50%);
+        }
+        #cursor-ring {
+            position: fixed; top: 0; left: 0; width: 28px; height: 28px;
+            border: 1.5px solid rgba(129,140,248, 0.6); border-radius: 50%; pointer-events: none;
+            z-index: 9999998; transform: translate(-50%, -50%);
+            transition: width 0.2s, height 0.2s, border-color 0.2s, background 0.2s;
+        }
+    `;
+    parent.head.appendChild(style);
+
+    const dot = parent.createElement('div'); dot.id = 'cursor-dot';
+    const ring = parent.createElement('div'); ring.id = 'cursor-ring';
+    parent.body.appendChild(dot);
+    parent.body.appendChild(ring);
+
+    let mx = -100, my = -100, rx = -100, ry = -100;
+    let running = false;
+
+    function animate() {
+        rx += (mx - rx) * 0.15;
+        ry += (my - ry) * 0.15;
+        ring.style.left = rx + 'px';
+        ring.style.top = ry + 'px';
+        parent.defaultView.requestAnimationFrame(animate);
+    }
+
+    parent.addEventListener('mousemove', (e) => {
+        mx = e.clientX; my = e.clientY;
+        dot.style.left = mx + 'px';
+        dot.style.top = my + 'px';
+        if (!running) { running = true; animate(); }
+    });
+    
+    parent.addEventListener('mouseover', (e) => {
+        const t = e.target ? e.target.tagName : '';
+        const isClickable = t === 'BUTTON' || t === 'A' || t === 'INPUT' || (e.target && e.target.closest && e.target.closest('button'));
+        if (isClickable) {
+            ring.style.width = '42px';
+            ring.style.height = '42px';
+            ring.style.borderColor = 'rgba(129,140,248,1)';
+            ring.style.background = 'rgba(129,140,248,0.1)';
+        }
+    });
+    parent.addEventListener('mouseout', (e) => {
+        const t = e.target ? e.target.tagName : '';
+        const isClickable = t === 'BUTTON' || t === 'A' || t === 'INPUT' || (e.target && e.target.closest && e.target.closest('button'));
+        if (isClickable) {
+            ring.style.width = '28px';
+            ring.style.height = '28px';
+            ring.style.borderColor = 'rgba(129,140,248,0.6)';
+            ring.style.background = 'transparent';
+        }
+    });
 }
-window.addEventListener('mousemove', function(e){
-    mx=e.clientX; my=e.clientY;
-    dot.style.left=mx+'px'; dot.style.top=my+'px';
-    if(!running){ running=true; step(); }
-}, true);
-document.addEventListener('mouseover', function(e){
-    if(e.target && (e.target.tagName==='BUTTON'||e.target.tagName==='A'||e.target.tagName==='INPUT')){
-        ring.style.width='36px'; ring.style.height='36px';
-        ring.style.borderColor='rgba(129,140,248,1)';
-        ring.style.background='rgba(129,140,248,0.05)';
-    }
-}, true);
-document.addEventListener('mouseout', function(e){
-    if(e.target && (e.target.tagName==='BUTTON'||e.target.tagName==='A'||e.target.tagName==='INPUT')){
-        ring.style.width='24px'; ring.style.height='24px';
-        ring.style.borderColor='rgba(129,140,248,0.8)';
-        ring.style.background='';
-    }
-}, true);
 </script>
 """, height=0)
 
@@ -392,18 +403,47 @@ if not db_loaded:
     st.error("song_db.pkl not found — run build_database.py first.")
     st.stop()
 
-def get_hash_counts(db):
-    c = {sid:0 for sid in db.song_names}
-    for matches in db.hash_dict.values():
-        for sid,_ in matches:
-            c[sid] = c.get(sid,0)+1
-    return c
+@st.cache_resource(show_spinner=False)
+def precompute_data(_db):
+    hc = {sid:0 for sid in _db.song_names}
+    pts = {sid:[] for sid in _db.song_names}
+    for h_key, matches in _db.hash_dict.items():
+        # Using the hash key frequency components (f1) as Y and offset as X for the plot
+        f1 = h_key[0] if isinstance(h_key, tuple) else (h_key % 1000)
+        for sid, offset in matches:
+            hc[sid] = hc.get(sid,0)+1
+            pts[sid].append((offset, f1))
+    return hc, pts
 
-song_hash_counts = get_hash_counts(db)
+song_hash_counts, song_points = precompute_data(db)
 total_songs  = len(db.song_names)
 total_hashes = len(db.hash_dict)
 avg_hashes   = int(sum(song_hash_counts.values())/max(total_songs,1))
 max_hashes   = max(song_hash_counts.values()) if song_hash_counts else 1
+
+@st.cache_data(show_spinner=False)
+def generate_card_image_b64(sid, color):
+    pts = song_points.get(sid, [])
+    if not pts:
+        return ""
+    
+    if len(pts) > 1000:
+        pts = random.sample(pts, 1000)
+        
+    x = [p[0] for p in pts]
+    y = [p[1] for p in pts]
+    
+    fig, ax = plt.subplots(figsize=(3.2, 1.8), dpi=100)
+    fig.patch.set_alpha(0)
+    ax.set_facecolor('#0c0c0e')
+    ax.scatter(x, y, s=0.8, c=color, alpha=0.9, edgecolors='none')
+    ax.axis('off')
+    fig.tight_layout(pad=0.2)
+    
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png', transparent=False, facecolor='#0c0c0e')
+    plt.close(fig)
+    return base64.b64encode(buf.getvalue()).decode()
 
 # ─────────────────────────────────────────────────────────── SIDEBAR
 with st.sidebar:
@@ -451,7 +491,7 @@ tab_lib, tab_id, tab_batch, tab_how = st.tabs([
 ])
 
 # ══════════════════════════════════════════════════════════════════════
-# TAB 1 — LIBRARY  (clean track list, no constellation images)
+# TAB 1 — LIBRARY  (Grid of Cards with Constellation Maps)
 # ══════════════════════════════════════════════════════════════════════
 with tab_lib:
     search = st.text_input("", placeholder="Search tracks…", label_visibility="collapsed")
@@ -464,61 +504,24 @@ with tab_lib:
     else:
         st.markdown(f'<div class="sec-label">Showing {len(filtered)} of {total_songs} tracks</div>', unsafe_allow_html=True)
 
-        if "sel_sid" not in st.session_state:
-            st.session_state.sel_sid = None
-
-        # Detail panel placeholder above list
-        detail_ph = st.container()
-
-        # Track table
-        st.markdown("""
-        <div class="track-table">
-          <div class="track-header">
-            <div>#</div><div>TITLE</div><div>DENSITY</div><div style="text-align:right">HASHES</div>
-          </div>""", unsafe_allow_html=True)
-
-        for idx, (sid, name) in enumerate(filtered, 1):
-            hc  = song_hash_counts.get(sid, 0)
-            pct = int(hc / max_hashes * 100)
-            sel = "selected" if st.session_state.sel_sid == sid else ""
-            st.markdown(f"""
-            <div class="track-row {sel}" onclick="">
-              <div class="track-num">{idx:02d}</div>
-              <div class="track-name">{name}</div>
-              <div><div class="track-bar-wrap"><div class="track-bar" style="width:{pct}%"></div></div></div>
-              <div class="track-hash">{hc:,}</div>
-            </div>""", unsafe_allow_html=True)
-
-            # invisible Streamlit button drives the click
-            if st.button("▷", key=f"t_{sid}", help=f"View {name}"):
-                st.session_state.sel_sid = None if st.session_state.sel_sid == sid else sid
-                st.rerun()
-
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        # ── Detail panel ──────────────────────────────────────────────
-        sel = st.session_state.sel_sid
-        if sel and sel in db.song_names:
-            sname  = db.song_names[sel]
-            shc    = song_hash_counts.get(sel, 0)
-
-            with detail_ph:
-                st.markdown(f"""
-                <div class="track-detail">
-                  <div class="td-title">{sname}</div>
-                  <div class="td-meta">Song ID #{sel} &nbsp;·&nbsp; Full Duration Indexed &nbsp;·&nbsp; 11,025 Hz</div>
-                  <div class="td-stats">
-                    <div class="td-stat"><div class="td-stat-val">{shc:,}</div><div class="td-stat-key">Hashes</div></div>
-                    <div class="td-stat"><div class="td-stat-val">#{sel}</div><div class="td-stat-key">Song ID</div></div>
-                    <div class="td-stat"><div class="td-stat-val">Full</div><div class="td-stat-key">Duration</div></div>
-                    <div class="td-stat"><div class="td-stat-val">11k</div><div class="td-stat-key">SR</div></div>
-                  </div>
-                </div>
-                """, unsafe_allow_html=True)
-
-                mp3 = os.path.join("EE200_course_project_data_2026","Q3_database",f"{sname}.mp3")
-                if os.path.exists(mp3):
-                    st.audio(mp3)
+        card_colors = ['#38bdf8', '#fbbf24', '#a78bfa', '#f472b6', '#34d399']
+        
+        html_cards = "<div class='song-grid'>"
+        for idx, (sid, name) in enumerate(filtered):
+            hc = song_hash_counts.get(sid, 0)
+            color = card_colors[idx % len(card_colors)]
+            b64_img = generate_card_image_b64(sid, color)
+            
+            html_cards += f"""
+            <div class="song-card">
+                <img src="data:image/png;base64,{b64_img}" alt="Constellation Map" />
+                <div class="song-card-title" title="{name}">{name}</div>
+                <div class="song-card-hashes">{hc:,} hashes</div>
+            </div>
+            """
+        html_cards += "</div>"
+        
+        st.markdown(html_cards, unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════
 # TAB 2 — IDENTIFY
