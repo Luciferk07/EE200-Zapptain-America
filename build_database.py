@@ -29,8 +29,8 @@ def build_db(db_dir, output_pkl="c:\\Users\\karti\\OneDrive\\Desktop\\EE200 Proj
         print(f"[{i+1}/{len(mp3_files)}] Processing: {song_name}")
         
         try:
-            # We don't need the whole song to identify it, but we can index the first 60 seconds
-            spectrogram, _ = recognizer.get_spectrogram(file_path, duration=60.0)
+            # Index the entire song to allow matching any clip
+            spectrogram, _ = recognizer.get_spectrogram(file_path)
             
             # Extract peaks
             freqs, times = recognizer.extract_peaks(spectrogram, percentile=90)

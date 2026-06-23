@@ -671,7 +671,7 @@ with tab_lib:
                                 <div class="detail-stat-label">Song ID</div>
                             </div>
                             <div class="detail-stat">
-                                <div class="detail-stat-val">60s</div>
+                                <div class="detail-stat-val">Full</div>
                                 <div class="detail-stat-label">Indexed Duration</div>
                             </div>
                             <div class="detail-stat">
@@ -933,6 +933,10 @@ with tab_batch:
 
     if uploaded_files:
         st.info(f"**{len(uploaded_files)}** clip(s) queued.")
+        
+        if "batch_df" not in st.session_state:
+            st.session_state.batch_df = None
+
         if st.button("⚡  Run Batch Identification", key="batch_btn"):
             progress = st.progress(0)
             status   = st.empty()
@@ -940,6 +944,7 @@ with tab_batch:
 
             for i, f in enumerate(uploaded_files):
                 base = os.path.splitext(f.name)[0]
+                full_name = f.name
                 status.markdown(f"Identifying `{f.name}`… ({i+1}/{len(uploaded_files)})")
                 prediction = "ERROR"
                 tmp_path = None
@@ -963,15 +968,17 @@ with tab_batch:
                 def normalise(s): return re.sub(r'[^a-z0-9]', '', s.lower())
                 is_correct = normalise(base) == normalise(prediction)
                 results_data.append({
-                    "filename":   base,
+                    "filename":   full_name,
                     "prediction": prediction,
                     "correct":    is_correct
                 })
                 progress.progress((i+1) / len(uploaded_files))
 
             status.markdown("**✅ Done!**")
+            st.session_state.batch_df = pd.DataFrame(results_data)
 
-            df = pd.DataFrame(results_data)
+        if st.session_state.batch_df is not None:
+            df = st.session_state.batch_df
             correct_count = df['correct'].sum()
             accuracy = int(correct_count / len(df) * 100)
 
