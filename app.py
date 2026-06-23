@@ -27,6 +27,17 @@ html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
     background-color: #080c10;
     color: #c9d1d9;
+    cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><circle cx="16" cy="16" r="10" fill="none" stroke="%233fb950" stroke-width="2"/><circle cx="16" cy="16" r="2" fill="%233fb950"/></svg>') 16 16, auto !important;
+}
+.stApp {
+    background: radial-gradient(circle at 10% 20%, rgba(13, 17, 23, 1) 0%, rgba(0, 30, 10, 0.1) 100%);
+    background-size: 200% 200%;
+    animation: bgGradient 15s ease infinite;
+}
+@keyframes bgGradient {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
 }
 .block-container { padding: 1.5rem 2rem !important; }
 
@@ -67,6 +78,11 @@ html, body, [class*="css"] {
     line-height: 1.1;
     margin: 0;
     letter-spacing: -1.5px;
+    animation: glow-pulse 3s infinite alternate;
+}
+@keyframes glow-pulse {
+    0% { text-shadow: 0 0 10px rgba(63, 185, 80, 0.2); }
+    100% { text-shadow: 0 0 25px rgba(63, 185, 80, 0.7), 0 0 10px rgba(63, 185, 80, 0.5); }
 }
 .hero-title span { color: #3fb950; }
 .hero-sub {
@@ -110,10 +126,17 @@ html, body, [class*="css"] {
     font-size: 0.88rem;
     border-bottom: 2px solid transparent;
     letter-spacing: 0.3px;
+    transition: all 0.3s ease;
+}
+.stTabs [data-baseweb="tab"]:hover {
+    background: rgba(63, 185, 80, 0.08) !important;
+    border-radius: 8px 8px 0 0;
+    color: #f0f6fc;
 }
 .stTabs [aria-selected="true"] {
     color: #f0f6fc !important;
     border-bottom: 2px solid #3fb950 !important;
+    box-shadow: 0 15px 15px -10px rgba(63, 185, 80, 0.4);
 }
 
 /* ── Song Card ── */
@@ -184,8 +207,11 @@ div[data-testid="stButton"] > button.song-btn {
 
 /* ── Song Detail Panel ── */
 .song-detail-panel {
-    background: linear-gradient(135deg, #0d1117, #111820);
-    border: 1px solid #238636;
+    background: rgba(13, 17, 23, 0.6) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(35, 134, 54, 0.5);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     border-radius: 12px;
     padding: 24px 28px;
     margin: 8px 0 24px;
