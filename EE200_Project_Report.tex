@@ -362,7 +362,7 @@ While the spectrogram visualizes the arrhythmia as a breakdown of the horizontal
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{q2_spectrogram.png}
-    \caption{Spectrogram of the patient ECG. We used $nperseg=1000$ (4 seconds) to achieve a high frequency resolution ($\Delta f = 0.25$ Hz), vividly revealing the steady horizontal harmonic lines in the first half, which break down into chaos during the arrhythmia.}
+    \caption{Spectrogram of the patient ECG. We used $nperseg=200$ (exactly one beat) to perfectly align the frequency resolution ($\Delta f = 1.25$ Hz) with the fundamental harmonics, vividly revealing the steady horizontal harmonic lines in the first half, which break down into chaos during the arrhythmia.}
     \label{fig:q2_spectrogram}
 \end{figure}
 
