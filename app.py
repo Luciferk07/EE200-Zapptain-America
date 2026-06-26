@@ -450,6 +450,8 @@ with tab_lib:
                 ax.set_xlabel("Time Frames"); ax.set_ylabel("Freq Bins")
                 ax.set_xlim(0,spec.shape[1]); ax.set_ylim(0,spec.shape[0])
                 fig.tight_layout(); st.pyplot(fig,use_container_width=True); plt.close(fig)
+        else:
+            st.error(f"Audio file not found at `{mp3_p}`. Please ensure you have extracted the dataset into the project folder.")
             
     else:
         search = st.text_input("Search", placeholder="Search tracks…", label_visibility="collapsed")
@@ -548,6 +550,8 @@ with tab_id:
                     run_identification(buf.getvalue(), ".wav")
                 except Exception as e:
                     st.warning(f"Could not generate clip: {e}")
+            else:
+                st.error(f"Audio file not found at `{mp3_p}`. Please ensure you have extracted the dataset into the project folder.")
 
     if "id_result" not in st.session_state:
         st.session_state.id_result = None
