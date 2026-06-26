@@ -32,7 +32,6 @@ html, body, [class*="css"] {
     font-family: 'Inter', sans-serif;
     background: #0c0c0e;
     color: #e4e4e7;
-    cursor: none !important;
 }
 * { box-sizing: border-box; }
 .block-container { padding: 1.5rem 2.2rem 4rem !important; max-width: 1440px !important; }
@@ -135,7 +134,6 @@ html, body, [class*="css"] {
     border-radius: 7px; padding: 0 20px;
     color: #52525b; font-weight: 600; font-size: 0.8rem;
     letter-spacing: 0.3px; transition: all 0.2s ease;
-    cursor: none !important;
 }
 .stTabs [data-baseweb="tab"]:hover { color: #a1a1aa; background: #18181b !important; }
 .stTabs [aria-selected="true"] {
@@ -167,7 +165,6 @@ html, body, [class*="css"] {
     border-radius: 14px;
     padding: 12px;
     transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-    cursor: none !important;
 }
 .song-card:hover {
     transform: translateY(-4px);
@@ -286,7 +283,7 @@ html, body, [class*="css"] {
     background: #18181b !important; border: 1px solid #27272a !important;
     color: #e4e4e7 !important; font-weight:600 !important;
     border-radius:9px !important; transition:all 0.2s !important;
-    padding:9px 22px !important; cursor: none !important;
+    padding:9px 22px !important;
 }
 .stButton > button:hover {
     background: #27272a !important; border-color:#3f3f46 !important;
@@ -308,76 +305,7 @@ audio { border-radius:8px; width:100%; }
 </style>
 """, unsafe_allow_html=True)
 
-# ─────────────────────────────────────────────────────────── CURSOR
-# We inject into window.parent.document to ensure the cursor works globally across the Streamlit app.
-components.html("""
-<script>
-const parent = window.parent.document;
-if (!parent.getElementById('cursor-style-injected')) {
-    const style = parent.createElement('style');
-    style.id = 'cursor-style-injected';
-    style.innerHTML = `
-        body, html, [class*="css"], iframe { cursor: none !important; }
-        #cursor-dot {
-            position: fixed; top: 0; left: 0; width: 4px; height: 4px;
-            background: #818cf8; border-radius: 50%; pointer-events: none;
-            z-index: 9999999; transform: translate(-50%, -50%);
-        }
-        #cursor-ring {
-            position: fixed; top: 0; left: 0; width: 28px; height: 28px;
-            border: 1.5px solid rgba(129,140,248, 0.6); border-radius: 50%; pointer-events: none;
-            z-index: 9999998; transform: translate(-50%, -50%);
-            transition: width 0.2s, height 0.2s, border-color 0.2s, background 0.2s;
-        }
-    `;
-    parent.head.appendChild(style);
 
-    const dot = parent.createElement('div'); dot.id = 'cursor-dot';
-    const ring = parent.createElement('div'); ring.id = 'cursor-ring';
-    parent.body.appendChild(dot);
-    parent.body.appendChild(ring);
-
-    let mx = -100, my = -100, rx = -100, ry = -100;
-    let running = false;
-
-    function animate() {
-        rx += (mx - rx) * 0.15;
-        ry += (my - ry) * 0.15;
-        ring.style.left = rx + 'px';
-        ring.style.top = ry + 'px';
-        parent.defaultView.requestAnimationFrame(animate);
-    }
-
-    parent.addEventListener('mousemove', (e) => {
-        mx = e.clientX; my = e.clientY;
-        dot.style.left = mx + 'px';
-        dot.style.top = my + 'px';
-        if (!running) { running = true; animate(); }
-    });
-    
-    parent.addEventListener('mouseover', (e) => {
-        const t = e.target ? e.target.tagName : '';
-        const isClickable = t === 'BUTTON' || t === 'A' || t === 'INPUT' || (e.target && e.target.closest && e.target.closest('button'));
-        if (isClickable) {
-            ring.style.width = '42px';
-            ring.style.height = '42px';
-            ring.style.borderColor = 'rgba(129,140,248,1)';
-            ring.style.background = 'rgba(129,140,248,0.1)';
-        }
-    });
-    parent.addEventListener('mouseout', (e) => {
-        const t = e.target ? e.target.tagName : '';
-        const isClickable = t === 'BUTTON' || t === 'A' || t === 'INPUT' || (e.target && e.target.closest && e.target.closest('button'));
-        if (isClickable) {
-            ring.style.width = '28px';
-            ring.style.height = '28px';
-            ring.style.borderColor = 'rgba(129,140,248,0.6)';
-            ring.style.background = 'transparent';
-        }
-    });
-}
-</script>
-""", height=0)
 
 # ─────────────────────────────────────────────────────────── MATPLOTLIB
 plt.rcParams.update({
@@ -421,29 +349,6 @@ total_hashes = len(db.hash_dict)
 avg_hashes   = int(sum(song_hash_counts.values())/max(total_songs,1))
 max_hashes   = max(song_hash_counts.values()) if song_hash_counts else 1
 
-@st.cache_data(show_spinner=False)
-def generate_card_image_b64(sid, color):
-    pts = song_points.get(sid, [])
-    if not pts:
-        return ""
-    
-    if len(pts) > 1000:
-        pts = random.sample(pts, 1000)
-        
-    x = [p[0] for p in pts]
-    y = [p[1] for p in pts]
-    
-    fig, ax = plt.subplots(figsize=(3.2, 1.8), dpi=100)
-    fig.patch.set_alpha(0)
-    ax.set_facecolor('#0c0c0e')
-    ax.scatter(x, y, s=0.8, c=color, alpha=0.9, edgecolors='none')
-    ax.axis('off')
-    fig.tight_layout(pad=0.2)
-    
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', transparent=False, facecolor='#0c0c0e')
-    plt.close(fig)
-    return base64.b64encode(buf.getvalue()).decode()
 
 # ─────────────────────────────────────────────────────────── SIDEBAR
 with st.sidebar:
@@ -494,42 +399,131 @@ tab_lib, tab_id, tab_batch, tab_how = st.tabs([
 # TAB 1 — LIBRARY  (Grid of Cards with Constellation Maps)
 # ══════════════════════════════════════════════════════════════════════
 with tab_lib:
-    search = st.text_input("", placeholder="Search tracks…", label_visibility="collapsed")
+    if "view_song_id" not in st.session_state:
+        st.session_state.view_song_id = None
 
-    sorted_songs = sorted(db.song_names.items(), key=lambda x: x[1])
-    filtered = [(sid,name) for sid,name in sorted_songs if search.lower() in name.lower()]
+    if st.session_state.view_song_id is not None:
+        sid = st.session_state.view_song_id
+        name = db.song_names.get(sid, "Unknown")
+        
+        if st.button("← Back to Library", key="btn_back"):
+            st.session_state.view_song_id = None
+            st.rerun()
+            
+        st.markdown(f'<div class="sec-label">Details · {name}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="hero-title" style="font-size:2.4rem;margin-bottom:20px;">{name}</div>', unsafe_allow_html=True)
+        
+        mp3_p = os.path.join("EE200_course_project_data_2026", "Q3_database", f"{name}.mp3")
+        if os.path.exists(mp3_p):
+            st.audio(mp3_p)
+            
+            with st.spinner("Analyzing 10-second sample..."):
+                spec, y = recognizer.get_spectrogram(mp3_p, duration=10, offset=10)
+                fr, ti = recognizer.extract_peaks(spec, percentile=90)
+                
+                # Step 1 — Waveform & Spectrogram
+                st.markdown('<div class="step-hdr"><div class="step-n">01</div><div class="step-t">Waveform & Spectrogram</div><div class="step-s">time → frequency</div></div>', unsafe_allow_html=True)
+                c1,c2 = st.columns(2)
+                with c1:
+                    fig,ax=plt.subplots(figsize=(8,3))
+                    tax=np.linspace(0,len(y)/recognizer.sr,len(y))
+                    ax.plot(tax,y,color='#6366f1',linewidth=0.5,alpha=0.9)
+                    ax.fill_between(tax,y,alpha=0.1,color='#818cf8')
+                    ax.set_title("Waveform (10s sample)",fontsize=9,color='#71717a',pad=6)
+                    ax.set_xlabel("Time (s)"); ax.set_ylabel("Amplitude")
+                    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
+                    fig.tight_layout(); st.pyplot(fig,use_container_width=True); plt.close(fig)
+                with c2:
+                    fig,ax=plt.subplots(figsize=(8,3))
+                    im=ax.imshow(spec,aspect='auto',origin='lower',cmap='magma',vmin=spec.max()-80,vmax=spec.max())
+                    fig.colorbar(im,ax=ax,format='%+.0fdB',shrink=0.75)
+                    ax.set_title("Log-Magnitude Spectrogram",fontsize=9,color='#71717a',pad=6)
+                    ax.set_xlabel("Time Frames"); ax.set_ylabel("Freq Bins")
+                    fig.tight_layout(); st.pyplot(fig,use_container_width=True); plt.close(fig)
 
-    if not filtered:
-        st.warning("No tracks match.")
+                # Step 2 — Constellation Map
+                st.markdown('<div class="step-hdr"><div class="step-n">02</div><div class="step-t">Constellation Map</div><div class="step-s">spectral peaks</div></div>', unsafe_allow_html=True)
+                fig,ax=plt.subplots(figsize=(14,3.5))
+                ax.imshow(spec,aspect='auto',origin='lower',cmap='magma',alpha=0.45,vmin=spec.max()-80,vmax=spec.max())
+                ax.scatter(ti,fr,c='#a78bfa',s=2.5,alpha=0.9,linewidths=0)
+                ax.set_title(f"{len(fr):,} spectral peaks extracted in sample",fontsize=9,color='#71717a',pad=6)
+                ax.set_xlabel("Time Frames"); ax.set_ylabel("Freq Bins")
+                ax.set_xlim(0,spec.shape[1]); ax.set_ylim(0,spec.shape[0])
+                fig.tight_layout(); st.pyplot(fig,use_container_width=True); plt.close(fig)
+            
     else:
-        st.markdown(f'<div class="sec-label">Showing {len(filtered)} of {total_songs} tracks</div>', unsafe_allow_html=True)
+        search = st.text_input("Search", placeholder="Search tracks…", label_visibility="collapsed")
+    
+        sorted_songs = sorted(db.song_names.items(), key=lambda x: x[1])
+        filtered = [(s_id,s_name) for s_id,s_name in sorted_songs if search.lower() in s_name.lower()]
+    
+        if not filtered:
+            st.warning("No tracks match.")
+        else:
+            st.markdown(f'<div class="sec-label">Showing {len(filtered)} of {total_songs} tracks</div>', unsafe_allow_html=True)
 
         card_colors = ['#38bdf8', '#fbbf24', '#a78bfa', '#f472b6', '#34d399']
-        
-        html_cards = "<div class='song-grid'>"
-        for idx, (sid, name) in enumerate(filtered):
-            hc = song_hash_counts.get(sid, 0)
-            color = card_colors[idx % len(card_colors)]
-            b64_img = generate_card_image_b64(sid, color)
-            
-            html_cards += f"""
-            <div class="song-card">
-                <img src="data:image/png;base64,{b64_img}" alt="Constellation Map" />
-                <div class="song-card-title" title="{name}">{name}</div>
-                <div class="song-card-hashes">{hc:,} hashes</div>
-            </div>
-            """
-        html_cards += "</div>"
-        
-        st.markdown(html_cards, unsafe_allow_html=True)
+        COLS = 5
+        rows = [filtered[i:i+COLS] for i in range(0, len(filtered), COLS)]
+        for row in rows:
+            cols = st.columns(COLS)
+            for col_idx, (sid, name) in enumerate(row):
+                hc = song_hash_counts.get(sid, 0)
+                color = card_colors[col_idx % len(card_colors)]
+                with cols[col_idx]:
+                    pts = song_points.get(sid, [])
+                    if pts:
+                        samp = random.sample(pts, min(800, len(pts)))
+                        xp = [p[0] for p in samp]
+                        yp = [p[1] for p in samp]
+                        fig_c, ax_c = plt.subplots(figsize=(3, 1.8), dpi=90)
+                        fig_c.patch.set_facecolor('#0c0c0e')
+                        ax_c.set_facecolor('#0c0c0e')
+                        ax_c.scatter(xp, yp, s=0.6, c=color, alpha=0.9, edgecolors='none')
+                        ax_c.axis('off')
+                        fig_c.tight_layout(pad=0.1)
+                        st.pyplot(fig_c, use_container_width=True)
+                        plt.close(fig_c)
+                    st.markdown(
+                        f'<div class="song-card-title" title="{name}">{name}</div>'
+                        f'<div class="song-card-hashes">{hc:,} hashes</div>',
+                        unsafe_allow_html=True
+                    )
+                    if st.button("View Details", key=f"view_{sid}"):
+                        st.session_state.view_song_id = sid
+                        st.rerun()
+                    st.markdown("<div style='margin-bottom:16px'></div>", unsafe_allow_html=True)
 
 # ══════════════════════════════════════════════════════════════════════
 # TAB 2 — IDENTIFY
 # ══════════════════════════════════════════════════════════════════════
 with tab_id:
+    def run_identification(audio_bytes, suffix=".mp3"):
+        with st.spinner("Fingerprinting…"):
+            t0_total = time.time()
+            tmp = None
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tf:
+                    tf.write(audio_bytes); tmp = tf.name
+
+                t0=time.time(); spec,y = recognizer.get_spectrogram(tmp); t_sp=int((time.time()-t0)*1000)
+                t0=time.time(); fr,ti  = recognizer.extract_peaks(spec, percentile=90); t_cn=int((time.time()-t0)*1000)
+                t0=time.time(); hs     = recognizer.generate_hashes(fr,ti); t_hs=int((time.time()-t0)*1000)
+                t0=time.time(); res    = db.match_hashes(hs); t_db=int((time.time()-t0)*1000)
+                t_tot = int((time.time()-t0_total)*1000)
+
+                st.session_state.id_result = dict(
+                    spec=spec,y=y,fr=fr,ti=ti,hs=hs,res=res,
+                    t_sp=t_sp,t_cn=t_cn,t_hs=t_hs,t_db=t_db,t_tot=t_tot
+                )
+            except Exception as ex:
+                st.error(f"Error: {ex}")
+            finally:
+                if tmp and os.path.exists(tmp): os.unlink(tmp)
+
     st.markdown('<div class="sec-label">Upload a clip · 5–30 seconds works best</div>', unsafe_allow_html=True)
 
-    up = st.file_uploader("", type=["mp3","wav"], label_visibility="collapsed")
+    up = st.file_uploader("Upload clip", type=["mp3","wav"], label_visibility="collapsed")
 
     # ── Sample clip generator ─────────────────────────────────────────
     with st.expander("🎲  Try a sample clip from the database"):
@@ -537,11 +531,11 @@ with tab_id:
         sample_choice = st.selectbox("Pick a song", [n for _,n in sample_songs], label_visibility="collapsed")
         col_s1, col_s2 = st.columns([1,2])
         with col_s1:
-            start_sec = st.slider("Start (seconds)", 0, 120, 30, label_visibility="collapsed")
+            start_sec = st.slider("Start (seconds)", 0, 120, 30)
         with col_s2:
-            dur_sec = st.slider("Duration (seconds)", 3, 20, 8, label_visibility="collapsed")
+            dur_sec = st.slider("Duration (seconds)", 3, 20, 8)
 
-        if st.button("Generate sample clip", key="gen_sample"):
+        if st.button("Generate & Auto-Identify", key="gen_sample"):
             mp3_p = os.path.join("EE200_course_project_data_2026","Q3_database",f"{sample_choice}.mp3")
             if os.path.exists(mp3_p):
                 import librosa, soundfile as sf
@@ -551,9 +545,7 @@ with tab_id:
                     sf.write(buf, y_s, sr_s, format="WAV")
                     buf.seek(0)
                     st.audio(buf, format="audio/wav")
-                    st.download_button("⬇  Download this sample", data=buf.getvalue(),
-                                       file_name=f"{sample_choice}_{start_sec}s.wav", mime="audio/wav")
-                    st.info(f"Upload this clip above to test identification!")
+                    run_identification(buf.getvalue(), ".wav")
                 except Exception as e:
                     st.warning(f"Could not generate clip: {e}")
 
@@ -563,27 +555,7 @@ with tab_id:
     if up:
         st.audio(up)
         if st.button("⚡  Identify", key="id_btn"):
-            with st.spinner("Fingerprinting…"):
-                t0_total = time.time()
-                tmp = None
-                try:
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tf:
-                        tf.write(up.getvalue()); tmp = tf.name
-
-                    t0=time.time(); spec,y = recognizer.get_spectrogram(tmp); t_sp=int((time.time()-t0)*1000)
-                    t0=time.time(); fr,ti  = recognizer.extract_peaks(spec, percentile=90); t_cn=int((time.time()-t0)*1000)
-                    t0=time.time(); hs     = recognizer.generate_hashes(fr,ti); t_hs=int((time.time()-t0)*1000)
-                    t0=time.time(); res    = db.match_hashes(hs); t_db=int((time.time()-t0)*1000)
-                    t_tot = int((time.time()-t0_total)*1000)
-
-                    st.session_state.id_result = dict(
-                        spec=spec,y=y,fr=fr,ti=ti,hs=hs,res=res,
-                        t_sp=t_sp,t_cn=t_cn,t_hs=t_hs,t_db=t_db,t_tot=t_tot
-                    )
-                except Exception as ex:
-                    st.error(f"Error: {ex}")
-                finally:
-                    if tmp and os.path.exists(tmp): os.unlink(tmp)
+            run_identification(up.getvalue())
 
     if st.session_state.id_result:
         R = st.session_state.id_result
@@ -721,7 +693,7 @@ with tab_batch:
                                file_name="sample_clips.zip", mime="application/zip")
             st.info("Extract the ZIP and upload all WAV files below to test batch identification!")
 
-    ups = st.file_uploader("", type=["mp3","wav"], accept_multiple_files=True, label_visibility="collapsed")
+    ups = st.file_uploader("Upload clips", type=["mp3","wav"], accept_multiple_files=True, label_visibility="collapsed")
 
     if ups:
         st.markdown(f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:0.72rem;color:#52525b;margin-bottom:12px;">{len(ups)} clips queued</div>', unsafe_allow_html=True)

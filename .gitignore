@@ -1,0 +1,16 @@
+*.zip
+*.rar
+*.pkl
+__pycache__/
+EE200_course_project_data_2026/
+GDrive_Songs/
+extracted_songs/
+CS661/
+Q1_outputs/
+Q1 Final_Submit/
+Q2_FINAL_SUBMIT/
+Q3 Final_Submit/
+Q3_Submission/
+project report final/
+EE200 Q1 PDF/
+*.pdf

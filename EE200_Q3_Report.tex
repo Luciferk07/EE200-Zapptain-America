@@ -1,0 +1,183 @@
+\documentclass[12pt,a4paper]{article}
+
+% ----- PACKAGES -----
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{graphicx}
+\usepackage{subcaption}
+\usepackage{float}
+\usepackage[margin=1in]{geometry}
+\usepackage{xcolor}
+\usepackage{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage{booktabs}
+\usepackage{titlesec}
+\usepackage{microtype}
+\usepackage{parskip}
+\usepackage{enumitem}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage[colorlinks=true, linkcolor=teal, urlcolor=magenta, citecolor=blue]{hyperref}
+
+% ----- COLORS -----
+\definecolor{iitkblue}{RGB}{0, 51, 102}
+\definecolor{highlight}{RGB}{220, 20, 60}
+\definecolor{lightgray}{gray}{0.95}
+\definecolor{darkgreen}{RGB}{0, 100, 0}
+\definecolor{softblue}{RGB}{230, 240, 255}
+\definecolor{softyellow}{RGB}{255, 255, 220}
+\definecolor{softgreen}{RGB}{220, 255, 220}
+
+% ----- SECTION FORMATTING -----
+\titleformat{\section}{\color{iitkblue}\Large\bfseries\sffamily}{\thesection}{1em}{}[\vspace{-0.3em}\rule{\textwidth}{1.2pt}]
+\titleformat{\subsection}{\color{iitkblue}\large\bfseries\sffamily}{\thesubsection}{1em}{}
+\titleformat{\subsubsection}{\color{teal}\normalsize\bfseries\sffamily}{\thesubsubsection}{1em}{}
+
+% ----- HEADER/FOOTER -----
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\textcolor{gray}{\small EE200: Course Project Report}}
+\fancyhead[R]{\textcolor{gray}{\small Summer 2026}}
+\fancyfoot[C]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0.4pt}
+
+% ----- CUSTOM BOXES -----
+\tcbuselibrary{skins, breakable}
+\newtcolorbox{math_box}[1][]{
+  colback=softblue, colframe=iitkblue, fonttitle=\bfseries\sffamily,
+  title=#1, arc=2mm, boxrule=0.8pt, left=6pt, right=6pt, top=4pt, bottom=4pt
+}
+\newtcolorbox{result_box}[1][]{
+  colback=softgreen, colframe=darkgreen, fonttitle=\bfseries\sffamily,
+  title=#1, arc=2mm, boxrule=0.8pt, left=6pt, right=6pt, top=4pt, bottom=4pt
+}
+\newtcolorbox{insight_box}[1][]{
+  colback=softyellow, colframe=orange!80!black, fonttitle=\bfseries\sffamily,
+  title=#1, arc=2mm, boxrule=0.8pt, left=6pt, right=6pt, top=4pt, bottom=4pt
+}
+
+% ----- TITLE -----
+\title{
+    \vspace{-1.5cm}
+    {\Huge\sffamily\bfseries\color{iitkblue} EE200 Course Project Report}\\[0.6em]
+    {\Large\color{gray} Signals, Systems and Networks (Summer 2026)}\\[0.3em]
+    {\large \textbf{Question 3: Sonic Signatures -- Audio Fingerprinting}}
+}
+\author{\Large \textbf{Your Name} \quad Roll No.: XXXXXXXX \\ \texttt{your\_email@iitk.ac.in}}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{empty}
+
+\begin{center}
+    \large \textbf{Instructor:} Dr.\ Tushar Sandhan \quad $\vert$ \quad \textbf{Institute:} IIT Kanpur \\[0.3em]
+    \rule{0.8\textwidth}{0.5pt}\\[0.3em]
+    \textit{A comprehensive report detailing the methodology, experiments, and results for Question 3: Sonic Signatures.}
+\end{center}
+
+\vspace{0.8cm}
+\tableofcontents
+\clearpage
+
+%====================================================
+\section{Question 3: Sonic Signatures -- Audio Fingerprinting}
+%====================================================
+
+\subsection{Objective}
+Build a Shazam-style audio fingerprinting system and deploy it as an interactive web application (``Zapptain America'').
+
+\subsection{Q3A: Theory and Experiments}
+
+\subsubsection{Experiment 1: The Spectrogram and Window Length Trade-off}
+
+The fundamental tool for audio analysis is the Short-Time Fourier Transform (STFT). We must choose a window length (\texttt{n\_fft}).
+\begin{itemize}[leftmargin=2em]
+    \item A \textbf{short window} provides excellent time resolution (we know exactly \textit{when} a note occurred) but poor frequency resolution (the frequencies blur together).
+    \item A \textbf{long window} provides excellent frequency resolution (we know exactly \textit{which} note was played) but poor time resolution (we don't know exactly when it started).
+\end{itemize}
+
+\begin{math_box}[Time-Frequency Uncertainty]
+For STFT with window size $N$ and hop $H$ at sample rate $f_s$:
+\begin{align}
+    \Delta t &= H/f_s \quad\text{(time resolution)}, \quad \Delta f = f_s/N \quad\text{(frequency resolution)} \\
+    &\text{Uncertainty: } \Delta t \cdot \Delta f \geq 1/(4\pi)
+\end{align}
+Larger $N$ gives better frequency resolution but worse time resolution. There is no free lunch.
+\end{math_box}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{q3a_experiment1.png}
+    \caption{STFT spectrograms of a 5-second clip from \textit{Let It Be}. \textbf{Left} ($N=256$): crisp note onsets, blurred frequencies. \textbf{Right} ($N=4096$): distinct harmonics, smeared onsets. We chose $N=2048$ as the optimal balance for the fingerprinting system.}
+    \label{fig:stft_tradeoff}
+\end{figure}
+
+\subsubsection{Experiment 2: Constellation Map \& Fingerprinting (Hashing)}
+
+Matching raw audio waveforms is impossible in a noisy cafe. Even matching raw spectrograms fails if the timing is slightly off. Instead, we extract \textbf{local maxima} (peaks) from the spectrogram to form a sparse \textit{constellation map}.
+
+\begin{insight_box}[Why pair peaks into hashes?]
+If we only match single frequencies $f_1$, we get thousands of false positives (many songs have a 440Hz note). But if we pair an anchor peak $f_1$ with a target peak $f_2$ separated by time $\Delta t$, we form a hash: $(f_1, f_2, \Delta t)$.
+The probability of two different songs having the exact same two frequencies separated by the exact same time delta is exponentially lower. The pair acts as a highly specific, unique identifier.
+\end{insight_box}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{q3a_experiment2.png}
+    \caption{Spectrogram overlaid with constellation map (red dots). Local maxima capture the ``harmonic skeleton'' of the song using fewer than 1\% of all spectrogram cells.}
+    \label{fig:constellation}
+\end{figure}
+
+\subsubsection{Experiment 3: Robustness to Noise}
+
+We added Gaussian noise to the query clip to observe its effect on the fingerprinting algorithm.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{q3a_experiment3.png}
+    \caption{Constellation Map with Heavy Noise (Blue dots). Original Peaks: 268, Noisy Peaks: 811.}
+    \label{fig:noise_robustness}
+\end{figure}
+
+As we increase the noise, the background noise introduces spurious peaks that overtake the true musical peaks. If too many true peaks fall below the dynamically calculated amplitude threshold, the generated hashes will completely change, and recognition fails.
+
+\subsubsection{Experiment 4: Pitch Shifting \& Time Stretching}
+
+What happens if a DJ speeds up a track by 2\% (time-stretching and pitch-shifting it)?
+The song sounds practically identical to humans. But our identifier is completely defeated. Why? Because the frequencies $f_1, f_2$ and the time delta $\Delta t$ are all absolute values.
+A pitch shift changes $f_1 \rightarrow f_1'$, so the hash $(f_1, f_2, \Delta t)$ no longer matches the database at all.
+
+\begin{result_box}[How to make it robust?]
+Instead of hashing absolute frequencies, we could hash the \textbf{ratio} of frequencies: $\frac{f_2}{f_1}$. A pitch shift multiplies all frequencies by a constant factor, so the ratio $\frac{k \cdot f_2}{k \cdot f_1}$ remains invariant. For time-stretching, we could hash the ratio of time deltas between triplets of peaks.
+\end{result_box}
+
+\clearpage
+
+\subsection{Q3B: Signals to Softwares (Zapptain America)}
+
+We have successfully developed and deployed \textbf{Zapptain America}, a fully interactive Streamlit application that implements the audio fingerprinting system.
+
+The application supports:
+\begin{itemize}
+    \item \textbf{Single-clip mode}: Identifies an uploaded audio file and visualizes the intermediate steps (Waveform, Spectrogram, Constellation Map, Offset Histogram).
+    \item \textbf{Batch mode}: Accepts multiple audio clips simultaneously and generates a \texttt{results.csv} file mapping filenames to their predicted songs.
+\end{itemize}
+
+\vspace{1cm}
+
+\begin{tcolorbox}[colback=lightgray, colframe=iitkblue, title=\textbf{Application Links}]
+\textbf{Live Application (Streamlit Cloud):}\\
+\url{https://INSERT_YOUR_STREAMLIT_APP_LINK_HERE.streamlit.app}
+
+\vspace{0.5cm}
+\textbf{Source Code Repository (GitHub):}\\
+\url{https://github.com/INSERT_YOUR_GITHUB_USERNAME_HERE/EE200-Zapptain-America}
+\end{tcolorbox}
+
+
+\end{document}
