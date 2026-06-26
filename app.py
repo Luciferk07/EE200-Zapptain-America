@@ -413,45 +413,17 @@ with tab_lib:
         st.markdown(f'<div class="sec-label">Details · {name}</div>', unsafe_allow_html=True)
         st.markdown(f'<div class="hero-title" style="font-size:2.4rem;margin-bottom:20px;">{name}</div>', unsafe_allow_html=True)
         
+        img_p = os.path.join("library_images", f"{sid}.png")
         mp3_p = os.path.join("EE200_course_project_data_2026", "Q3_database", f"{name}.mp3")
+        
         if os.path.exists(mp3_p):
             st.audio(mp3_p)
             
-            with st.spinner("Analyzing 10-second sample..."):
-                spec, y = recognizer.get_spectrogram(mp3_p, duration=10, offset=10)
-                fr, ti = recognizer.extract_peaks(spec, percentile=90)
-                
-                # Step 1 — Waveform & Spectrogram
-                st.markdown('<div class="step-hdr"><div class="step-n">01</div><div class="step-t">Waveform & Spectrogram</div><div class="step-s">time → frequency</div></div>', unsafe_allow_html=True)
-                c1,c2 = st.columns(2)
-                with c1:
-                    fig,ax=plt.subplots(figsize=(8,3))
-                    tax=np.linspace(0,len(y)/recognizer.sr,len(y))
-                    ax.plot(tax,y,color='#6366f1',linewidth=0.5,alpha=0.9)
-                    ax.fill_between(tax,y,alpha=0.1,color='#818cf8')
-                    ax.set_title("Waveform (10s sample)",fontsize=9,color='#71717a',pad=6)
-                    ax.set_xlabel("Time (s)"); ax.set_ylabel("Amplitude")
-                    ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
-                    fig.tight_layout(); st.pyplot(fig,use_container_width=True); plt.close(fig)
-                with c2:
-                    fig,ax=plt.subplots(figsize=(8,3))
-                    im=ax.imshow(spec,aspect='auto',origin='lower',cmap='magma',vmin=spec.max()-80,vmax=spec.max())
-                    fig.colorbar(im,ax=ax,format='%+.0fdB',shrink=0.75)
-                    ax.set_title("Log-Magnitude Spectrogram",fontsize=9,color='#71717a',pad=6)
-                    ax.set_xlabel("Time Frames"); ax.set_ylabel("Freq Bins")
-                    fig.tight_layout(); st.pyplot(fig,use_container_width=True); plt.close(fig)
-
-                # Step 2 — Constellation Map
-                st.markdown('<div class="step-hdr"><div class="step-n">02</div><div class="step-t">Constellation Map</div><div class="step-s">spectral peaks</div></div>', unsafe_allow_html=True)
-                fig,ax=plt.subplots(figsize=(14,3.5))
-                ax.imshow(spec,aspect='auto',origin='lower',cmap='magma',alpha=0.45,vmin=spec.max()-80,vmax=spec.max())
-                ax.scatter(ti,fr,c='#a78bfa',s=2.5,alpha=0.9,linewidths=0)
-                ax.set_title(f"{len(fr):,} spectral peaks extracted in sample",fontsize=9,color='#71717a',pad=6)
-                ax.set_xlabel("Time Frames"); ax.set_ylabel("Freq Bins")
-                ax.set_xlim(0,spec.shape[1]); ax.set_ylim(0,spec.shape[0])
-                fig.tight_layout(); st.pyplot(fig,use_container_width=True); plt.close(fig)
+        if os.path.exists(img_p):
+            st.markdown('<div class="step-hdr"><div class="step-n">01</div><div class="step-t">Acoustic Fingerprint</div><div class="step-s">pre-computed analysis</div></div>', unsafe_allow_html=True)
+            st.image(img_p, use_container_width=True)
         else:
-            st.error(f"Audio file not found at `{mp3_p}`. Please ensure you have extracted the dataset into the project folder.")
+            st.error(f"Pre-generated analysis image not found for `{name}`.")
             
     else:
         search = st.text_input("Search", placeholder="Search tracks…", label_visibility="collapsed")
