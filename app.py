@@ -503,27 +503,20 @@ with tab_id:
     with st.expander("🎲  Try a sample clip from the database"):
         sample_songs = sorted(db.song_names.items(), key=lambda x: x[1])
         sample_choice = st.selectbox("Pick a song", [n for _,n in sample_songs], label_visibility="collapsed")
-        col_s1, col_s2 = st.columns([1,2])
-        with col_s1:
-            start_sec = st.slider("Start (seconds)", 0, 120, 30)
-        with col_s2:
-            dur_sec = st.slider("Duration (seconds)", 3, 20, 8)
+        
+        st.markdown("<div style='font-size:0.85rem;color:#71717a;margin-bottom:12px;'>Select a song to test against the acoustic fingerprint database. This uses a pre-generated 15-second snippet.</div>", unsafe_allow_html=True)
 
-        if st.button("Generate & Auto-Identify", key="gen_sample"):
-            mp3_p = os.path.join("EE200_course_project_data_2026","Q3_database",f"{sample_choice}.mp3")
-            if os.path.exists(mp3_p):
-                import librosa, soundfile as sf
-                try:
-                    y_s, sr_s = librosa.load(mp3_p, sr=None, offset=float(start_sec), duration=float(dur_sec))
-                    buf = io.BytesIO()
-                    sf.write(buf, y_s, sr_s, format="WAV")
-                    buf.seek(0)
-                    st.audio(buf, format="audio/wav")
-                    run_identification(buf.getvalue(), ".wav")
-                except Exception as e:
-                    st.warning(f"Could not generate clip: {e}")
+        if st.button("Test Fingerprint Match", key="gen_sample"):
+            sid_choice = next(k for k,v in db.song_names.items() if v == sample_choice)
+            wav_p = os.path.join("sample_audio", f"{sid_choice}.wav")
+            
+            if os.path.exists(wav_p):
+                st.audio(wav_p, format="audio/wav")
+                with open(wav_p, "rb") as f:
+                    wav_bytes = f.read()
+                run_identification(wav_bytes, ".wav")
             else:
-                st.error(f"Audio file not found at `{mp3_p}`. Please ensure you have extracted the dataset into the project folder.")
+                st.error(f"Sample audio not found for `{sample_choice}`. Please ensure the `sample_audio` folder exists.")
 
     if "id_result" not in st.session_state:
         st.session_state.id_result = None
