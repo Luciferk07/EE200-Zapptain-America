@@ -89,89 +89,130 @@
 %====================================================
 
 \subsection{Problem Statement}
-Build a Shazam-style audio fingerprinting system capable of identifying highly degraded, short audio snippets by matching them against a database of full-length songs with near-perfect accuracy and constant-time $O(1)$ complexity.
+The objective of this project is to build a robust, Shazam-style audio fingerprinting system capable of identifying highly degraded, short audio snippets (queries) by matching them against a database of 50 full-length tracks. The algorithm must exhibit near-perfect accuracy, resilience to environmental noise, and a constant-time $O(1)$ lookup complexity to ensure instant identification.
 
 \subsection{Mathematical Foundation \& Signal Processing Pipeline}
 
 \subsubsection{1. Short-Time Fourier Transform (STFT)}
-Audio is non-stationary. To capture its frequency evolution, we compute the Short-Time Fourier Transform by multiplying the signal $x[n]$ with a sliding Hann window $w[n]$:
+Audio is inherently non-stationary; its frequency content changes rapidly over time. To capture this frequency evolution, we compute the Short-Time Fourier Transform (STFT). The signal $x[n]$ is partitioned into overlapping frames by multiplying it with a sliding window function $w[n]$ (specifically, a Hann window to minimize spectral leakage):
 \begin{equation}
     X[m, k] = \sum_{n=0}^{N-1} x[n + mH] \cdot w[n] \cdot e^{-j2\pi k n / N}
 \end{equation}
-where $H$ is the hop length and $N$ is the FFT size.
+where $H$ is the hop length and $N$ is the FFT size. The resulting 2D complex matrix is converted into a log-magnitude spectrogram $S[m,k] = 20 \log_{10}(|X[m,k]|)$.
 
-\begin{math_box}[Time-Frequency Uncertainty]
-    By the Gabor Limit, we cannot have perfect time and frequency resolution simultaneously. 
+\begin{math_box}[Time-Frequency Uncertainty Principle]
+    By the Gabor Limit, we cannot simultaneously achieve perfect time and perfect frequency resolution. 
     \begin{align*}
         \text{Short Window } (N \text{ small}) &\implies \text{High Time Res, Poor Freq Res} \\
         \text{Long Window } (N \text{ large}) &\implies \text{Poor Time Res, High Freq Res}
     \end{align*}
-    For music, $N=2048$ at $11,025$ Hz provides a balanced $46$ ms window with $5.4$ Hz resolution.
+    For music at a sample rate of $11,025$ Hz, choosing $N=2048$ with a hop length of $512$ provides a balanced $46$ ms window, yielding a frequency bin resolution of roughly $5.4$ Hz.
 \end{math_box}
 
 \subsubsection{2. Constellation Map \& Peak Extraction}
-Matching raw spectrograms fails under noise and misalignment. Instead, we extract local maxima (peaks) from the spectrogram to form a sparse \textit{constellation map}. A cell $X[m,k]$ is a peak if it is the strict maximum within a local 2D neighborhood (e.g., $15 \times 15$ cells).
+Raw spectrograms contain millions of data points and are highly susceptible to noise. A matching algorithm comparing raw matrices would fail if the timing was misaligned by even a fraction of a second. Instead, we compress the audio into a sparse \textit{constellation map}.
 
+A cell $X[m,k]$ is designated as a peak if it is the strict local maximum within a defined 2D neighborhood (e.g., $15 \times 15$ cells in the time-frequency domain). This effectively isolates the dominant harmonic frequencies and sharp percussive transients, reducing a dense spectrogram into a sparse set of coordinates $(t, f)$ representing less than 1\% of the original data.
+
+\subsubsection{3. Combinatorial Hashing (Anchor-Target Pairing)}
 \begin{insight_box}[Single Peaks vs. Paired Hashes]
-If we only match single frequencies $f_1$, we get thousands of false positives (many songs have a 440 Hz note). But if we pair an anchor peak $f_1$ with a target peak $f_2$ separated by time $\Delta t$, we form a hash: $(f_1, f_2, \Delta t)$. The probability of two different songs having the exact same two frequencies separated by the exact same time delta is exponentially lower. The pair acts as a highly specific, unique identifier robust to noise.
+If we attempt to index a song using single frequencies $f_1$, the system will generate massive amounts of false positives (e.g., thousands of songs share a 440 Hz 'A' note). However, by pairing an \textit{anchor peak} $f_1$ with a \textit{target peak} $f_2$ separated by time $\Delta t$, we create a highly specific hash: $(f_1, f_2, \Delta t)$. 
+
+The combinatorial probability of two different songs containing the exact same two frequencies separated by the exact same microsecond time delta is exponentially lower. This pairing mechanism is the core reason the algorithm is cryptographic and noise-robust.
 \end{insight_box}
 
-\subsubsection{3. Hash Matching and Offset Histograms}
-For each matched hash in the query, we calculate the time offset: $\Delta t_{\text{offset}} = t_{\text{database}} - t_{\text{query}}$. If the song is a genuine match, thousands of hashes will agree on the exact same $\Delta t_{\text{offset}}$. We plot a histogram of these offsets; the peak of the histogram provides the confidence score.
+\subsubsection{4. Database Indexing and Offset Histograms}
+For every hash generated from the full songs, we store an entry in a hash map:
+\begin{equation}
+    \text{Database\_Map}\left[\, (f_1, f_2, \Delta t) \,\right] = [\, (\text{Song\_ID}, t_{\text{anchor}}) \,]
+\end{equation}
+When querying an unknown audio clip, we generate its hashes and look them up in the database in $O(1)$ time. For every matched hash, we calculate the relative time offset:
+\begin{equation}
+    \Delta t_{\text{offset}} = t_{\text{database\_anchor}} - t_{\text{query\_anchor}}
+\end{equation}
+If the song is a genuine match, the matched hashes will have maintained their relative timing, causing thousands of hits to agree on the exact same $\Delta t_{\text{offset}}$. A histogram of these offsets is plotted, and the peak of the histogram directly determines the match confidence score.
 
 \clearpage
-\subsection{Experiments and Observations}
+\subsection{Experiments, Observations, and Analysis}
 
-\subsubsection{Experiment 1: Window Length Trade-off}
+\subsubsection{Experiment 1: The Window Length Trade-off}
+To understand the Gabor Limit practically, we computed the STFT of an identical audio clip using two extreme window sizes: $N=256$ (short) and $N=4096$ (long).
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{Q3_outputs/02_window_length.png}
-    \caption{STFT spectrograms with $N=256$ (left) vs. $N=4096$ (right).}
+    \caption{STFT spectrograms comparing $N=256$ (left) against $N=4096$ (right).}
 \end{figure}
-\textbf{Observation:} A small window smears frequencies vertically (poor frequency resolution) but captures sharp transient drum hits perfectly. A large window resolves horizontal musical notes cleanly (high frequency resolution) but blurs transients across time. We chose $N=2048$ as the optimal trade-off.
 
-\subsubsection{Experiment 2: Robustness to Additive Noise}
+\textbf{Observation \& Explanation:}\\
+In the left plot ($N=256$), the vertical lines (representing percussive drum hits) are incredibly sharp, demonstrating excellent time resolution. However, the horizontal bands (musical notes) are smeared and thick, indicating poor frequency resolution. 
+
+In the right plot ($N=4096$), the horizontal notes are razor-thin (excellent frequency resolution), but the sharp drum hits have been blurred horizontally across time, causing pre-echo artifacts (poor time localization). This demonstrates that $N=2048$ is the optimal ``Goldilocks'' trade-off for capturing both the rhythmic and melodic constellation peaks required for accurate hashing.
+
+\vspace{0.5cm}
+
+\subsubsection{Experiment 2: Single Peaks vs. Paired Hashes}
+\textbf{Observation \& Explanation:}\\
+When we attempted identification by simply recording the absolute timestamps of single high-energy peaks, the system failed entirely when the query clip was subjected to random cropping. An absolute timestamp is meaningless unless the audio starts at $t=0$. 
+
+By transitioning to \textbf{paired hashes} $(f_1, f_2, \Delta t)$, the system becomes completely invariant to cropping. The time difference $\Delta t$ between two peaks is preserved regardless of where the clip was sliced from the original track. This relative structural encoding is what enables the offset histogram to reliably align the query with the database track.
+
+\clearpage
+\subsubsection{Experiment 3: Robustness to Additive Noise (AWGN)}
+To test the resilience of the constellation map, we injected high-variance Additive White Gaussian Noise (AWGN) into a clean query clip, simulating a noisy café environment.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{Q3_outputs/03_noise.png}
     \caption{Clean spectrogram (left) vs. Spectrogram heavily corrupted by AWGN (right).}
 \end{figure}
-\textbf{Observation:} While the noise floor increases significantly, the highest energy musical peaks (the constellation points) still survive. Because our algorithm only hashes the local maxima and ignores the background, it successfully matches clips even with SNR $< 0$ dB.
 
-\subsubsection{Experiment 3: Pitch Shifting and Time Stretching}
+\textbf{Observation \& Explanation:}\\
+The right spectrogram visually demonstrates a vastly elevated noise floor (indicated by the brighter background). However, the fundamental algorithm succeeds despite this corruption. Why? Because the STFT concentrates the energy of pure tones into dense, isolated spikes. Even when broad-spectrum noise is added, the high-energy harmonic peaks remain the \textit{local maxima} within their neighborhoods. Since our algorithm only hashes the highest amplitude peaks and aggressively discards the rest of the spectrogram, the mathematical ``skeleton'' of the song is preserved, allowing for successful matches even at SNR levels approaching $0$ dB.
+
+\vspace{0.5cm}
+
+\subsubsection{Experiment 4: Pitch Shifting and Time Stretching}
+We modified the query clip by applying a pitch shift of +4 semitones (without altering the tempo) to observe the effect on the hashing logic.
+
 \begin{figure}[H]
     \centering
     \includegraphics[width=\textwidth]{Q3_outputs/04_pitch_shift.png}
-    \caption{Original (left) vs. Pitch-shifted by +4 semitones (right).}
+    \caption{Original spectrogram (left) vs. Pitch-shifted by +4 semitones (right).}
 \end{figure}
-\textbf{Observation:} Standard Shazam fails completely when audio is pitch-shifted, because every frequency $f$ shifts to $k \cdot f$, breaking the exact $(f_1, f_2, \Delta t)$ hash. 
-\textbf{Solution:} To make it invariant to pitch shifts, we could hash the \textbf{ratio} of frequencies: $\frac{f_2}{f_1}$. A pitch shift multiplies all frequencies by a constant factor, so the ratio $\frac{k \cdot f_2}{k \cdot f_1}$ remains invariant.
+
+\textbf{Observation \& Explanation:}\\
+As seen on the right, the entire harmonic structure has shifted upward on the frequency axis. \textbf{The standard Shazam algorithm fails completely under pitch-shifting or time-stretching.} Because the algorithm relies on exact frequency bins $f_1$ and $f_2$ to form a hash key, shifting the pitch alters every single frequency, causing zero hashes to match the database.
+
+\textbf{Proposed Algorithmic Fix:}\\
+To make the system invariant to pitch shifts, one must alter the hashing function to use the \textbf{ratio} of frequencies instead of absolute frequencies. A pitch shift multiplies all frequencies by a constant factor $k$. Thus, the new hash key $\frac{k \cdot f_2}{k \cdot f_1}$ mathematically reduces to $\frac{f_2}{f_1}$, remaining perfectly invariant to pitch alterations. Similarly, for time-stretching, hashing the ratio of time deltas between a triplet of peaks would provide temporal invariance.
 
 \clearpage
 %====================================================
 \section{Question 3B: Signals to Softwares (Deployment)}
 %====================================================
 
-\subsection{Deployed Web Application}
-We have successfully developed and deployed \textbf{Zapptain America}, a fully interactive Streamlit application that implements the audio fingerprinting system. 
+\subsection{Deployed Web Application (Zapptain America)}
+The acoustic fingerprinting system was successfully wrapped into a highly interactive, beautifully styled web application using the Streamlit framework. The application was built to simulate a production-grade interface for both casual users and technical evaluators.
 
-\begin{result_box}[Live Application & Source Code]
-\textbf{Live Deployed App:} \href{https://ee200-zapptain-america.streamlit.app/}{https://ee200-zapptain-america.streamlit.app/} \\
+\begin{result_box}[Live Application \& Source Code Links]
+\textbf{Live Deployed App:} \href{https://ee200-zapptain-america-lucifer.streamlit.app/}{https://ee200-zapptain-america-lucifer.streamlit.app/} \\
 \textbf{GitHub Source Code:} \href{https://github.com/Luciferk07/EE200-Zapptain-America}{https://github.com/Luciferk07/EE200-Zapptain-America}
 \end{result_box}
 
-\subsection{Cloud Deployment Architecture}
-Streamlit Community Cloud and GitHub impose strict storage limits (100MB per repository/file), making it impossible to host the raw 394MB `.mp3` database online. To bypass this and ensure the app works immediately:
+\subsection{Architecting for Cloud Constraints}
+Streamlit Community Cloud and GitHub impose strict storage limitations (100MB per repository/file). Uploading the raw 394MB \texttt{.mp3} database was impossible. To bypass this and guarantee that the indexed song database ships with the deployed app so it works immediately, the following hybrid architecture was engineered:
+
 \begin{itemize}
-    \item \textbf{Library View:} Pre-computed acoustic fingerprint visuals are stored in \texttt{library\_images/}, rendering instantly without dynamic audio processing.
-    \item \textbf{Sample Auto-Generator:} 15-second lightweight \texttt{.wav} snippets were pre-generated in \texttt{sample\_audio/} to allow instant dynamic testing.
-    \item \textbf{Database:} The \texttt{song\_db.pkl} hash map contains over 3 million unique serialized hashes and ships perfectly within the size limits.
+    \item \textbf{Pre-Computed Visuals (Library View):} Instead of calculating STFTs on the fly for the library browser, the acoustic fingerprint visuals (spectrograms and constellation maps) were pre-generated as lightweight \texttt{.png} images and stored in the \texttt{library\_images/} directory.
+    \item \textbf{Pre-Computed Audio (Sample Auto-Generator):} To allow users to test the identification system without needing to manually upload a song, a script extracted 15-second lightweight \texttt{.wav} snippets from all 50 songs, storing them in \texttt{sample\_audio/}. This bypasses the need for the heavy MP3s.
+    \item \textbf{Serialized Database:} The core algorithmic matching relies entirely on the \texttt{song\_db.pkl} hash map. This serialized dictionary contains over 3 million unique hashes but is highly compressed, shipping perfectly within the size limits.
 \end{itemize}
 
-\subsection{Application Features}
+\subsection{Application Modes}
 \begin{enumerate}
-    \item \textbf{Single-Clip Identification Mode:} Upload an audio clip. The app instantly processes the STFT, extracts peaks, matches the database, and beautifully visualizes the Waveform, Spectrogram, Constellation Map, and the critical Offset Histogram that determines the match.
-    \item \textbf{Batch Benchmark Mode:} Select an internal auto-benchmark or upload a batch of files. The app identifies them in bulk and generates the exact \texttt{results.csv} containing the \texttt{filename, prediction} columns for automated grading.
+    \item \textbf{Single-Clip Identification Mode:} Users can upload a custom, degraded audio clip or test an internal sample. The app instantly processes the STFT, extracts peaks, queries the database in $O(1)$ time, and visualizes the intermediate steps: the downsampled Waveform, Spectrogram, Constellation Map, and the critical Offset Histogram that determines the final match confidence.
+    \item \textbf{Batch Benchmark Mode:} Evaluators can utilize the ``Run Internal Auto-Benchmark'' feature. The app autonomously iterates over the pre-generated test clips, runs the fingerprinting algorithm in bulk, calculates system accuracy, and produces the strictly formatted \texttt{results.csv} containing the exact \texttt{filename, prediction} columns required for automated grading.
 \end{enumerate}
 
 \end{document}
