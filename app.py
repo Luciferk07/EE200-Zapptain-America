@@ -675,11 +675,11 @@ with tab_batch:
     st.markdown('<div class="sec-label" style="margin-top:20px;">Or test your own files</div>', unsafe_allow_html=True)
     ups = st.file_uploader("Upload clips", type=["mp3","wav"], accept_multiple_files=True, label_visibility="collapsed")
 
+    if "batch_df" not in st.session_state:
+        st.session_state.batch_df = None
+
     if ups:
         st.markdown(f'<div style="font-family:\'JetBrains Mono\',monospace;font-size:0.72rem;color:#52525b;margin-bottom:12px;">{len(ups)} clips queued</div>', unsafe_allow_html=True)
-
-        if "batch_df" not in st.session_state:
-            st.session_state.batch_df = None
 
         if st.button("⚡  Run Batch", key="batch_btn"):
             prog = st.progress(0)
@@ -706,31 +706,31 @@ with tab_batch:
             stat.markdown("**Done!**")
             st.session_state.batch_df = pd.DataFrame(rows)
 
-        if st.session_state.batch_df is not None:
-            df = st.session_state.batch_df
-            correct = int(df['correct'].sum())
-            acc = int(correct/len(df)*100)
-            acc_col = "#818cf8" if acc==100 else ("#f59e0b" if acc>=70 else "#f87171")
+    if st.session_state.batch_df is not None:
+        df = st.session_state.batch_df
+        correct = int(df['correct'].sum())
+        acc = int(correct/len(df)*100)
+        acc_col = "#818cf8" if acc==100 else ("#f59e0b" if acc>=70 else "#f87171")
 
-            bc1,bc2,bc3 = st.columns(3)
-            for col,val,lbl in [(bc1,str(len(df)),"Clips"),(bc2,str(correct),"Correct"),(bc3,f"{acc}%","Accuracy")]:
-                with col:
-                    col_style = f"color:{acc_col};" if lbl=="Accuracy" else ""
-                    st.markdown(f'<div class="stat-box"><div class="stat-box-val" style="{col_style}">{val}</div><div class="stat-box-key">{lbl}</div></div>', unsafe_allow_html=True)
+        bc1,bc2,bc3 = st.columns(3)
+        for col,val,lbl in [(bc1,str(len(df)),"Clips"),(bc2,str(correct),"Correct"),(bc3,f"{acc}%","Accuracy")]:
+            with col:
+                col_style = f"color:{acc_col};" if lbl=="Accuracy" else ""
+                st.markdown(f'<div class="stat-box"><div class="stat-box-val" style="{col_style}">{val}</div><div class="stat-box-key">{lbl}</div></div>', unsafe_allow_html=True)
 
-            st.markdown('<br><div class="sec-label">Results</div>', unsafe_allow_html=True)
-            rows_html=""
-            for _,row in df.iterrows():
-                badge=f'<span class="badge-ok">✓ MATCH</span>' if row['correct'] else f'<span class="badge-fail">✗ WRONG</span>'
-                rows_html+=f"""<div class="batch-row">
-                  <div style="flex:1;font-size:0.8rem;font-weight:600;color:#d4d4d8;font-family:'JetBrains Mono',monospace;">{row['filename']}</div>
-                  <div style="flex:1;font-size:0.8rem;color:#52525b;">{row['prediction']}</div>
-                  {badge}
-                </div>"""
-            st.markdown(f'<div class="batch-table-wrap">{rows_html}</div>', unsafe_allow_html=True)
+        st.markdown('<br><div class="sec-label">Results</div>', unsafe_allow_html=True)
+        rows_html=""
+        for _,row in df.iterrows():
+            badge=f'<span class="badge-ok">✓ MATCH</span>' if row['correct'] else f'<span class="badge-fail">✗ WRONG</span>'
+            rows_html+=f"""<div class="batch-row">
+              <div style="flex:1;font-size:0.8rem;font-weight:600;color:#d4d4d8;font-family:'JetBrains Mono',monospace;">{row['filename']}</div>
+              <div style="flex:1;font-size:0.8rem;color:#52525b;">{row['prediction']}</div>
+              {badge}
+            </div>"""
+        st.markdown(f'<div class="batch-table-wrap">{rows_html}</div>', unsafe_allow_html=True)
 
-            csv = df[['filename','prediction']].to_csv(index=False)
-            st.download_button("⬇  results.csv", data=csv, file_name="results.csv", mime="text/csv")
+        csv = df[['filename','prediction']].to_csv(index=False)
+        st.download_button("⬇  results.csv", data=csv, file_name="results.csv", mime="text/csv")
 
 # ══════════════════════════════════════════════════════════════════════
 # TAB 4 — HOW IT WORKS
