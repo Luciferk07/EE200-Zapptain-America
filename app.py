@@ -635,33 +635,44 @@ with tab_batch:
     st.markdown('<div class="sec-label">Bulk identification & accuracy benchmarking</div>', unsafe_allow_html=True)
 
     # Sample data section
-    with st.expander("🎲  Download sample test clips (no upload needed)"):
-        st.markdown("<div style='font-size:0.85rem;color:#71717a;margin-bottom:12px;'>Download a ZIP file containing pre-generated 15-second test clips to benchmark the system's accuracy.</div>", unsafe_allow_html=True)
+    with st.expander("🎲  Run Internal Auto-Benchmark"):
+        st.markdown("<div style='font-size:0.85rem;color:#71717a;margin-bottom:12px;'>Automatically benchmark the system's accuracy using the pre-generated 15-second test clips.</div>", unsafe_allow_html=True)
         
-        n_samples = st.slider("Number of clips to download", 1, 50, 5)
+        n_samples = st.slider("Number of clips to benchmark", 1, 50, 5)
 
-        if st.button("Download test clips", key="gen_batch_samples"):
-            import zipfile
-            zip_buf = io.BytesIO()
+        if st.button("⚡ Run Auto-Benchmark", key="gen_batch_samples"):
             song_list = list(db.song_names.items())
-            import random
-            # Select random subset if they don't want all 50
             selected_songs = song_list[:n_samples]
             
-            with zipfile.ZipFile(zip_buf, 'w') as zf:
-                for sid, name in selected_songs:
-                    wav_p = os.path.join("sample_audio", f"{sid}.wav")
-                    if os.path.exists(wav_p):
-                        try:
-                            with open(wav_p, "rb") as f:
-                                zf.writestr(f"{name}.wav", f.read())
-                        except: pass
-                        
-            zip_buf.seek(0)
-            st.download_button("⬇  Download sample_clips.zip", data=zip_buf.getvalue(),
-                               file_name="sample_clips.zip", mime="application/zip")
-            st.info("Extract the ZIP and upload all WAV files below to test batch identification!")
+            prog = st.progress(0)
+            stat = st.empty()
+            rows = []
+            
+            if "batch_df" not in st.session_state:
+                st.session_state.batch_df = None
+                
+            for i, (sid, name) in enumerate(selected_songs):
+                stat.markdown(f"Identifying **{name}**… ({i+1}/{n_samples})")
+                wav_p = os.path.join("sample_audio", f"{sid}.wav")
+                pred = "ERROR"
+                if os.path.exists(wav_p):
+                    try:
+                        sp, _ = recognizer.get_spectrogram(wav_p)
+                        fr2, ti2 = recognizer.extract_peaks(sp, percentile=90)
+                        hs2 = recognizer.generate_hashes(fr2, ti2)
+                        ms = db.match_hashes(hs2)
+                        pred = ms[0]['song_name'] if (ms and ms[0]['score'] >= 15) else "NO MATCH"
+                    except:
+                        pass
+                
+                def nm(s): return re.sub(r'[^a-z0-9]','',s.lower())
+                rows.append({"filename": f"{name}.wav", "prediction": pred, "correct": nm(name)==nm(pred)})
+                prog.progress((i+1)/n_samples)
+                
+            stat.markdown("**Auto-Benchmark Complete!**")
+            st.session_state.batch_df = pd.DataFrame(rows)
 
+    st.markdown('<div class="sec-label" style="margin-top:20px;">Or test your own files</div>', unsafe_allow_html=True)
     ups = st.file_uploader("Upload clips", type=["mp3","wav"], accept_multiple_files=True, label_visibility="collapsed")
 
     if ups:
