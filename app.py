@@ -635,30 +635,28 @@ with tab_batch:
     st.markdown('<div class="sec-label">Bulk identification & accuracy benchmarking</div>', unsafe_allow_html=True)
 
     # Sample data section
-    with st.expander("🎲  Generate sample test clips (no upload needed)"):
-        st.markdown("Pick songs and clip settings to auto-generate a test set.", unsafe_allow_html=False)
-        ncols_sample = st.columns(3)
-        with ncols_sample[0]:
-            n_samples = st.slider("Number of clips", 1, 10, 5)
-        with ncols_sample[1]:
-            sample_dur = st.slider("Clip duration (s)", 3, 15, 8)
-        with ncols_sample[2]:
-            sample_start = st.slider("Start offset (s)", 5, 60, 20)
+    with st.expander("🎲  Download sample test clips (no upload needed)"):
+        st.markdown("<div style='font-size:0.85rem;color:#71717a;margin-bottom:12px;'>Download a ZIP file containing pre-generated 15-second test clips to benchmark the system's accuracy.</div>", unsafe_allow_html=True)
+        
+        n_samples = st.slider("Number of clips to download", 1, 50, 5)
 
-        if st.button("Generate & Download test clips", key="gen_batch_samples"):
-            import librosa, soundfile as sf, zipfile
+        if st.button("Download test clips", key="gen_batch_samples"):
+            import zipfile
             zip_buf = io.BytesIO()
-            song_list = list(db.song_names.items())[:n_samples]
+            song_list = list(db.song_names.items())
+            import random
+            # Select random subset if they don't want all 50
+            selected_songs = song_list[:n_samples]
+            
             with zipfile.ZipFile(zip_buf, 'w') as zf:
-                for sid, name in song_list:
-                    mp3p = os.path.join("EE200_course_project_data_2026","Q3_database",f"{name}.mp3")
-                    if os.path.exists(mp3p):
+                for sid, name in selected_songs:
+                    wav_p = os.path.join("sample_audio", f"{sid}.wav")
+                    if os.path.exists(wav_p):
                         try:
-                            y_tmp, sr_tmp = librosa.load(mp3p, sr=None, offset=float(sample_start), duration=float(sample_dur))
-                            wb = io.BytesIO()
-                            sf.write(wb, y_tmp, sr_tmp, format="WAV")
-                            zf.writestr(f"{name}.wav", wb.getvalue())
+                            with open(wav_p, "rb") as f:
+                                zf.writestr(f"{name}.wav", f.read())
                         except: pass
+                        
             zip_buf.seek(0)
             st.download_button("⬇  Download sample_clips.zip", data=zip_buf.getvalue(),
                                file_name="sample_clips.zip", mime="application/zip")
