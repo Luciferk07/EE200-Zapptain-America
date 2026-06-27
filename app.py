@@ -570,10 +570,12 @@ with tab_id:
             c1,c2 = st.columns(2)
             with c1:
                 fig,ax=plt.subplots(figsize=(8,3))
-                tax=np.linspace(0,len(y)/recognizer.sr,len(y))
-                ax.plot(tax,y,color='#6366f1',linewidth=0.5,alpha=0.9)
-                ax.fill_between(tax,y,alpha=0.1,color='#818cf8')
-                ax.set_title("Waveform",fontsize=9,color='#71717a',pad=6)
+                ds = max(1, len(y)//2000)
+                y_plot = y[::ds]
+                tax = np.linspace(0, len(y)/recognizer.sr, len(y_plot))
+                ax.plot(tax,y_plot,color='#6366f1',linewidth=0.5,alpha=0.9)
+                ax.fill_between(tax,y_plot,alpha=0.1,color='#818cf8')
+                ax.set_title("Waveform (Downsampled for display)",fontsize=9,color='#71717a',pad=6)
                 ax.set_xlabel("Time (s)"); ax.set_ylabel("Amplitude")
                 ax.spines['top'].set_visible(False); ax.spines['right'].set_visible(False)
                 fig.tight_layout(); st.pyplot(fig,use_container_width=True); plt.close(fig)
